@@ -11,3 +11,7 @@ Planning
   gloss can decode without further information
 - this means not including the type in the information
   which is read directly from the RAF
+
+| Size | Header | Rest |
+|:----:|:------:|:----:|
+| short | byte | bytes |
