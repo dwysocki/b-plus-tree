@@ -18,27 +18,33 @@
    :keys     key-list
    :children child-list))
 
-(gloss.core/defcodec child-node
+(gloss.core/defcodec internal-node
   (gloss.core/ordered-map
    :keys     key-list
    :children child-list))
+
+(gloss.core/defcodec leaf-node
+  (gloss.core/ordered-map
+   :keys     key-list
+   :children child-list
+   :nextleaf :int64))
 
 (gloss.core/defcodec record-node
   {:data C-string})
 
 (def type->encoding
-  {:root-leaf    [0 root-node  ]
-   :root-nonleaf [1 root-node  ]
-   :internal     [2 child-node ]
-   :leaf         [3 child-node ]
-   :record       [4 record-node]})
+  {:root-leaf    [0 root-node    ]
+   :root-nonleaf [1 root-node    ]
+   :internal     [2 internal-node]
+   :leaf         [3 leaf-node    ]
+   :record       [4 record-node  ]})
 
 (def byte->encoding
-  {0 [:root-leaf    root-node  ]
-   1 [:root-nonleaf root-node  ]
-   2 [:internal     child-node ]
-   3 [:leaf         child-node ]
-   4 [:record       record-node]})
+  {0 [:root-leaf    root-node    ]
+   1 [:root-nonleaf root-node    ]
+   2 [:internal     internal-node]
+   3 [:leaf         leaf-node    ]
+   4 [:record       record-node  ]})
 
 (def leaf-types
   #{:root-leaf :leaf})
