@@ -1,6 +1,6 @@
 (ns b-plus-tree.core
   "Primary functions for interacting with the B+ Tree."
-  (:require [b-plus-tree io nodes]
+  (:require [b-plus-tree io nodes util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
 
@@ -9,7 +9,7 @@
   Returns nil if node is a leaf."
   ([key node raf]
      (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
-       (let [[k ptr] (dbg (first key-ptrs))]
+       (when-let [[k ptr] (dbg (first key-ptrs))]
          (if (pos? (dbg (.compareTo key k)))
            (if-let [key-ptrs (next key-ptrs)]
              (recur key-ptrs)
@@ -22,7 +22,7 @@
   contains key, else returns nil."
   ([key node raf]
      (if (contains? b-plus-tree.nodes/leaf-types (:type node))
-       (if ((:keys node) key)
+       (if (dbg (b-plus-tree.util/in? (:keys node) key))
          node
          nil)
        (recur key (next-node key node raf) raf))))
@@ -31,14 +31,16 @@
   "Finds the record node associated with key by traversing node's subtree.
   If key is not contained in node's subtree, returns nil."
   ([key node raf]
+     (println "records maaan")
      (when-let [leaf (find-leaf key node raf)]
-       (let [key-ptrs (b-plus-tree.nodes/key-ptrs leaf)]
-         (loop [key-ptrs key-ptrs]
-           (let [[k ptr] (first key-ptrs)]
-             (if (= k key)
-               (b-plus-tree.io/read-node raf ptr)
-               (when-let [key-ptrs (next key-ptrs)]
-                 (recur key-ptrs)))))))))
+       (println "I found the leaf")
+       (loop [key-ptrs (b-plus-tree.nodes/key-ptrs leaf)]
+         (println "gettin loopy")
+         (when-let [[k ptr] (first key-ptrs)]
+           (if (= k key)
+             (b-plus-tree.io/read-node raf ptr)
+             (when-let [key-ptrs (next key-ptrs)]
+               (recur key-ptrs))))))))
 
 (defn find
   "Returns the value associated with key by traversing the entire tree, or

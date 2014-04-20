@@ -51,3 +51,8 @@
            keys (map first pairs)
            fns (map second pairs)]
        (zipmap keys ((apply juxt fns) expr)))))
+
+(defn in?
+  "Returns true if item is in coll, otherwise false."
+  ([coll item]
+     (some #(= item %) coll)))

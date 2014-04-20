@@ -41,7 +41,7 @@
    4 [:record       record-node]})
 
 (def leaf-types
-  [:root-leaf :leaf])
+  #{:root-leaf :leaf})
 
 (defn key-ptrs
   "Given a node, returns key-ptr pairs, where each ptr points to the node
