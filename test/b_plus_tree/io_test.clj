@@ -22,7 +22,8 @@
                   :children [3 10 17]}
                  {:type :leaf,
                   :keys ["x" "y"]
-                  :children [10 15 16]}
+                  :children [10 15]
+                  :nextleaf 16}
                  {:type :record
                   :data "http://www.wikipedia.org"}]]
       (with-open [raf (new java.io.RandomAccessFile fname "rwd")]

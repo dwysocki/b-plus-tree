@@ -21,19 +21,24 @@
 (def leaf-nodes
   {300 {:type :leaf
         :keys ["a"]
-        :children [800 400]}
+        :children [800]
+        :nextleaf 400}
    400 {:type :leaf
         :keys ["b"]
-        :children [900 500]}
+        :children [900]
+        :nextleaf 500}
    500 {:type :leaf
         :keys ["c"]
-        :children [1000 600]}
+        :children [1000]
+        :nextleaf 600}
    600 {:type :leaf
         :keys ["d"]
-        :children [1100 700]}
+        :children [1100]
+        :nextleaf 700}
    700 {:type :leaf
         :keys ["e" "f"]
-        :children [1200 1300 -1]}})
+        :children [1200 1300]
+        :nextleaf -1}})
 
 (def record-nodes
   {800  {:type :record
@@ -57,9 +62,10 @@
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doseq [[ptr node] nodes]
         (b-plus-tree.io/write-node node raf ptr))
-      (doseq [[key record-node] (map (fn [k r] [k r])
+      (doseq [[key record-node] (map list
                                      ["a" "b" "c" "d" "e" "f"]
                                      (vals (sort record-nodes)))]
+        (println "key:" key)
         (is (= (b-plus-tree.core/find key raf)
                (:data record-node)))))
     (io/delete-file "/tmp/RAF")))
