@@ -11,6 +11,7 @@
           raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")
           nodes [{:type :root-leaf,
                   :nextfree -1,
+                  :pagesize 0,
                   :keys ["a" "b" "c"],
                   :children [1 2 3 4]}
                  {:type :root-nonleaf,

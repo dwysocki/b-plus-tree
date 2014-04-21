@@ -16,6 +16,10 @@
        (assoc (gloss.io/decode encoding (gloss.io/to-byte-buffer node-bytes))
          :type type))))
 
+(defmacro read-root
+  "Reads the root node from the RandomAccessFile"
+  ([raf] `(read-node ~raf 0)))
+
 (defn write-node
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."

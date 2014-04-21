@@ -7,6 +7,7 @@
 (def root-node
   {0 {:type :root-nonleaf
       :nextfree -1
+      :pagesize 100
       :keys ["c"]
       :children [100 200]}})
 
@@ -68,4 +69,13 @@
         (println "key:" key)
         (is (= (b-plus-tree.core/find key raf)
                (:data record-node)))))
+    (io/delete-file "/tmp/RAF")))
+
+(deftest slice
+  (testing "slicing tree"
+    (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
+      (doseq [[ptr node] nodes]
+        (b-plus-tree.io/write-node node raf ptr))
+      (println "a:" (b-plus-tree.core/find-slice "a" raf))
+      (println "b:e" (b-plus-tree.core/find-slice "b" "e" raf)))
     (io/delete-file "/tmp/RAF")))
