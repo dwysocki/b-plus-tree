@@ -76,6 +76,7 @@
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doseq [[ptr node] nodes]
         (b-plus-tree.io/write-node node raf ptr))
+      (println "slice it up")
       (println "a:" (b-plus-tree.core/find-slice "a" raf))
       (println "b:e" (b-plus-tree.core/find-slice "b" "e" raf)))
     (io/delete-file "/tmp/RAF")))

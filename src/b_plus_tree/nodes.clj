@@ -15,6 +15,7 @@
 (gloss.core/defcodec root-node
   (gloss.core/ordered-map
    :nextfree :int64
+   :pagesize :int16
    :keys     key-list
    :children child-list))
 

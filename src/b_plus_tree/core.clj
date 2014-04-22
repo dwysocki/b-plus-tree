@@ -9,6 +9,7 @@
   ([key node raf]
      (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
        (when-let [[k ptr] (dbg (first key-ptrs))]
+         (println (map type [key k]))
          (if (neg? (dbg (.compareTo key k)))
            (b-plus-tree.io/read-node raf ptr)
            (if-let [key-ptrs (next key-ptrs)]
@@ -82,8 +83,10 @@
 (defn find-slice
   ""
   ([start raf]
-     (when-let [leaf (find-type key :leaf (b-plus-tree.io/read-root raf) raf)]
+     (when-let [leaf (find-type start :leaf (b-plus-tree.io/read-root raf) raf)]
+       (println "leaf:" leaf)
        (traverse start leaf raf)))
   ([start stop raf]
-     (when-let [leaf (find-type key :leaf (b-plus-tree.io/read-root raf) raf)]
+     (when-let [leaf (find-type start :leaf (b-plus-tree.io/read-root raf) raf)]
+       (println "leaf:" leaf)
        (traverse start stop leaf raf))))
