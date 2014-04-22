@@ -22,9 +22,8 @@
   contains key, else returns nil."
   ([key node raf]
      (if (contains? b-plus-tree.nodes/leaf-types (:type node))
-       (if (dbg (b-plus-tree.util/in? (:keys node) key))
-         node
-         nil)
+       (when (dbg (b-plus-tree.util/in? (:keys node) key))
+         node)
        (recur key (next-node key node raf) raf))))
 
 (defn find-record
@@ -76,7 +75,7 @@
                               [k (:data (b-plus-tree.io/read-node raf ptr))])
                             pairs)
                        (let [next-ptr (:nextleaf leaf)]
-                         (when (pos? next-ptr)
+                         (when (and next-ptr (pos? next-ptr)) ; nil check
                            (lazy-seq
                             (next-fn (b-plus-tree.io/read-node raf next-ptr)
                                      start raf true)))))))]
