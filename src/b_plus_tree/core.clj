@@ -66,19 +66,27 @@
   ([leaf start raf]
      (let [next-fn
            (fn next-fn [leaf start raf found?]
-             (when-let [pairs (->> leaf
+             (let [next-ptr (:nextleaf leaf)]
+               (if found?
+                 (lazy-cat
+                  (->> leaf
+                       b-plus-tree.nodes/key-ptrs
+                       (map (fn [[k ptr]]
+                              [k (:data (b-plus-tree.io/read-node raf ptr))])))
+                  (when (not= next-ptr -1)
+                    (let [next-leaf (b-plus-tree.io/read-node raf next-ptr)]
+                      (lazy-seq (next-fn next-leaf start raf true)))))
+                 (when-let [pairs (->> leaf
                                    b-plus-tree.nodes/key-ptrs
                                    (filter #(-> % (.compareTo start) neg? not))
-                                   #(or found? (contains? % start)))]
-               (println "eyyo")
-               (concat (map (fn [[k ptr]]
-                              [k (:data (b-plus-tree.io/read-node raf ptr))])
-                            pairs)
-                       (let [next-ptr (:nextleaf leaf)]
-                         (when (and next-ptr (pos? next-ptr)) ; nil check
-                           (lazy-seq
-                            (next-fn (b-plus-tree.io/read-node raf next-ptr)
-                                     start raf true)))))))]
+                                   #(when-not found? (contains? % start)))]
+                   (lazy-cat
+                    (map (fn [[k ptr]]
+                           [k (:data (b-plus-tree.io/read-node raf ptr))])
+                         pairs)
+                    (when (not= next-ptr -1)
+                      (let [next-leaf (b-plus-tree.io/read-node raf next-ptr)]
+                        (next-fn next-leaf start raf true))))))))]
        (lazy-seq (next-fn leaf start raf false))))
   ([leaf start stop raf]
      (take-while (fn [[k v]] (-> k (.compareTo stop) neg?))
