@@ -71,10 +71,15 @@
                                    b-plus-tree.nodes/key-ptrs
                                    (filter #(-> % (.compareTo start) neg? not))
                                    #(or found? (contains? % start)))]
-               (lazy-cat (map (fn [[k ptr]]
-                                [k (:data (b-plus-tree.io/read-node raf ptr))])
-                              pairs)
-                         (lazy-seq (next-fn leaf start raf true)))))]
+               (println "eyyo")
+               (concat (map (fn [[k ptr]]
+                              [k (:data (b-plus-tree.io/read-node raf ptr))])
+                            pairs)
+                       (let [next-ptr (:nextleaf leaf)]
+                         (when (pos? next-ptr)
+                           (lazy-seq
+                            (next-fn (b-plus-tree.io/read-node raf next-ptr)
+                                     start raf true)))))))]
        (lazy-seq (next-fn leaf start raf false))))
   ([leaf start stop raf]
      (take-while (fn [[k v]] (-> k (.compareTo stop) neg?))
