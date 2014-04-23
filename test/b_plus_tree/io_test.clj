@@ -16,6 +16,7 @@
                   :children [1 2 3 4]}
                  {:type :root-nonleaf,
                   :nextfree -1,
+                  :pagesize 0,
                   :keys ["a" "b" "c"],
                   :children [5 4 6 1]}
                  {:type :internal,

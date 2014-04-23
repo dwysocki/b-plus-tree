@@ -62,7 +62,9 @@
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,
   assuming that leaf contains start, the key from which traversal begins.
   The sequence ends before stop is reached, or if no stop is given ends when
-  there are no more leaves left."
+  there are no more leaves left.
+
+  Not working."
   ([leaf start raf]
      (let [next-fn
            (fn next-fn [leaf start raf found?]
