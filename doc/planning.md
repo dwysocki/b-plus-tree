@@ -21,7 +21,7 @@ Planning
 ## Inserting into non-full leaf
 
 - Start with key-vals pairs.
-- split this sequence at the point where k_i < k < k_{i+1}
+- split this sequence at the point where `k_i < k < k_{i+1}`
 - concatenate first half, new key-val pair, last half
 - this is the new key-vals pairs sequence
 - now convert this into separate keys and vals sequences
