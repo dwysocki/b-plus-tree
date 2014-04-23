@@ -10,7 +10,7 @@
      (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
        (when-let [[k ptr] (dbg (first key-ptrs))]
          (println (map type [key k]))
-         (if (neg? (dbg (.compareTo key k)))
+         (if (neg? (dbg (compare key k)))
            (b-plus-tree.io/read-node raf ptr)
            (if-let [key-ptrs (next key-ptrs)]
              (recur key-ptrs)
@@ -22,7 +22,7 @@
      (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
        (when-let [[k ptr] (dbg (first key-ptrs))]
          (println (map type [key k]))
-         (if (neg? (dbg (.compareTo key k)))
+         (if (neg? (dbg (compare key k)))
            ptr
            (if-let [key-ptrs (next key-ptrs)]
              (recur key-ptrs)
@@ -70,8 +70,13 @@
        (when-let [record (find-type key :record root raf)]
          (:data record)))))
 
+(defn insert-record
+  "Inserts a record into the given leaf node and writes changes to file."
+  ([key val leaf raf]))
+
 (defn insert
-  "Inserts key-value pair into the B+ Tree."
+  "Inserts key-value pair into the B+ Tree. Returns the new record if
+  successful, or nil if key already exists."
   ([key val order raf]
      (let [; find the leaf to insert into, while building a stack of
            ; parent pointers
@@ -87,6 +92,9 @@
                  (recur (next-ptr key node raf) stack))))]
        (when-not (find-record key leaf raf)
          ; record doesn't exist already, so we can insert
+         (if-not (full? leaf order)
+           (insert-record key val leaf raf)
+           )
          (comment (do-insertion))))))
 
 (defn traverse
@@ -111,7 +119,7 @@
                       (lazy-seq (next-fn next-leaf start raf true)))))
                  (when-let [pairs (->> leaf
                                    b-plus-tree.nodes/key-ptrs
-                                   (filter #(-> % (.compareTo start) neg? not))
+                                   (filter #(-> % (compare start) neg? not))
                                    #(when-not found? (contains? % start)))]
                    (lazy-cat
                     (map (fn [[k ptr]]
@@ -122,7 +130,7 @@
                         (next-fn next-leaf start raf true))))))))]
        (lazy-seq (next-fn leaf start raf false))))
   ([leaf start stop raf]
-     (take-while (fn [[k v]] (-> k (.compareTo stop) neg?))
+     (take-while (fn [[k v]] (-> k (compare stop) neg?))
                  (traverse leaf start raf))))
 
 (defn find-slice
