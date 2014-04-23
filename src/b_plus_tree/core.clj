@@ -68,10 +68,10 @@
      (let [[new-keys new-ptrs]
            (if-let [key-ptrs (seq (b-plus-tree.nodes/key-ptrs leaf))]
              (let [_ (println "key-ptrs" key-ptrs)
-                   split-key-ptrs (split-with #(< % key))
-                   new-key-ptrs (concat (first split-key-ptrs)
-                                        [[key next-free]]
-                                        (last split-key-ptrs))]
+                   split-key-ptrs (dbg (split-with #(< % key)))
+                   new-key-ptrs (dbg (concat (first split-key-ptrs)
+                                             [[key next-free]]
+                                             (last split-key-ptrs)))]
                (apply map list new-key-ptrs))
              [[key] [next-free]])
            new-leaf (assoc leaf :keys new-keys :children new-ptrs)
