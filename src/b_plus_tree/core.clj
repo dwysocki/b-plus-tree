@@ -16,6 +16,18 @@
              (recur key-ptrs)
              (b-plus-tree.io/read-node raf (last (:children node)))))))))
 
+(defn next-ptr
+  "Returns the next pointer when searching the tree for key in node."
+  ([key node raf]
+     (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
+       (when-let [[k ptr] (dbg (first key-ptrs))]
+         (println (map type [key k]))
+         (if (neg? (dbg (.compareTo key k)))
+           ptr
+           (if-let [key-ptrs (next key-ptrs)]
+             (recur key-ptrs)
+             (-> node :children last)))))))
+
 (defn find-leaf
   "Recursively finds the leaf node associated with key by traversing node's
   subtree. If the given node is itself a leaf node, returns the node if it
@@ -57,6 +69,25 @@
      (let [root (b-plus-tree.io/read-root raf)]
        (when-let [record (find-type key :record root raf)]
          (:data record)))))
+
+(defn insert
+  "Inserts key-value pair into the B+ Tree."
+  ([key val order raf]
+     (let [; find the leaf to insert into, while building a stack of
+           ; parent pointers
+           [leaf stack]
+           (loop [node-ptr 0
+                  stack    []]
+             (let [node  (b-plus-tree.io/read-node node-ptr raf)
+                   stack (conj stack node-ptr)]
+               (if (b-plus-tree.util/in? b-plus-tree.nodes/leaf-types node)
+                 ; found leaf
+                 node
+                 ; keep searching
+                 (recur (next-ptr key node raf) stack))))]
+       (when-not (find-record key leaf raf)
+         ; record doesn't exist already, so we can insert
+         (comment (do-insertion))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

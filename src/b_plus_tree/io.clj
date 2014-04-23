@@ -11,7 +11,8 @@
      (let [size (.readShort raf)
            node-bytes (byte-array size)]
        (.readFully raf node-bytes)
-       (gloss.io/decode nodes/node (gloss.io/to-byte-buffer node-bytes)))))
+       (assoc (gloss.io/decode nodes/node (gloss.io/to-byte-buffer node-bytes))
+         :offset offset))))
 
 (defmacro read-root
   "Reads the root node from the RandomAccessFile"
