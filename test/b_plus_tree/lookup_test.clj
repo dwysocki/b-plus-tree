@@ -6,8 +6,8 @@
 
 (def root-node
   {0 {:type :root-nonleaf
-      :nextfree -1
-      :pagesize 100
+      :next-free -1
+      :page-size 100
       :keys ["c"]
       :children [100 200]}})
 
@@ -23,23 +23,23 @@
   {300 {:type :leaf
         :keys ["a"]
         :children [800]
-        :nextleaf 400}
+        :next-leaf 400}
    400 {:type :leaf
         :keys ["b"]
         :children [900]
-        :nextleaf 500}
+        :next-leaf 500}
    500 {:type :leaf
         :keys ["c"]
         :children [1000]
-        :nextleaf 600}
+        :next-leaf 600}
    600 {:type :leaf
         :keys ["d"]
         :children [1100]
-        :nextleaf 700}
+        :next-leaf 700}
    700 {:type :leaf
         :keys ["e" "f"]
         :children [1200 1300]
-        :nextleaf -1}})
+        :next-leaf -1}})
 
 (def record-nodes
   {800  {:type :record
@@ -62,7 +62,7 @@
   (testing "retreiving all records"
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doseq [[ptr node] nodes]
-        (b-plus-tree.io/write-node node raf ptr))
+        (b-plus-tree.io/write-node node raf))
       (doseq [[key record-node] (map list
                                      ["a" "b" "c" "d" "e" "f"]
                                      (vals (sort record-nodes)))]
@@ -75,7 +75,7 @@
   (testing "slicing tree"
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doseq [[ptr node] nodes]
-        (b-plus-tree.io/write-node node raf ptr))
+        (b-plus-tree.io/write-node node raf))
       (println "slice it up")
       (println "a:" (b-plus-tree.core/find-slice "a" raf))
       (println "b:e" (b-plus-tree.core/find-slice "b" "e" raf)))

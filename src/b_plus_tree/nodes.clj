@@ -18,19 +18,17 @@
 
 (gloss.core/defcodec root-leaf-node
   (gloss.core/ordered-map
-   :type     :root-leaf
-   :nextfree :int64
-   :pagesize :int16
-   :keys     key-list
-   :children child-list))
+   :type      :root-leaf
+   :next-free :int64
+   :keys      key-list
+   :children  child-list))
 
 (gloss.core/defcodec root-nonleaf-node
   (gloss.core/ordered-map
-   :type     :root-nonleaf
-   :nextfree :int64
-   :pagesize :int16
-   :keys     key-list
-   :children child-list))
+   :type      :root-nonleaf
+   :next-free :int64
+   :keys      key-list
+   :children  child-list))
 
 (gloss.core/defcodec internal-node
   (gloss.core/ordered-map
@@ -40,10 +38,10 @@
 
 (gloss.core/defcodec leaf-node
   (gloss.core/ordered-map
-   :type     :leaf
-   :keys     key-list
-   :children child-list
-   :nextleaf :int64))
+   :type      :leaf
+   :keys      key-list
+   :children  child-list
+   :next-leaf :int64))
 
 (gloss.core/defcodec record-node
   (gloss.core/ordered-map
@@ -59,8 +57,21 @@
                       :record       record-node}
                      :type))
 
+(defn new-root
+  "Returns a new leaf root."
+  ([page-size]
+     {:type      :root-leaf,
+      :next-free  page-size,
+      :keys              [],
+      :children          [],
+      :offset             0}))
+
 (def leaf-types
   #{:root-leaf :leaf})
+
+(defn leaf?
+  "Returns true if node is a leaf-type, else nil."
+  ([node] (b-plus-tree.util/in? leaf-types (:type node))))
 
 (defn key-ptrs
   "Given a node, returns key-ptr pairs, where each ptr points to the node

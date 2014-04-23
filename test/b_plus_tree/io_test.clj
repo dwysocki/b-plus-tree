@@ -1,44 +1,37 @@
 (ns b-plus-tree.io-test
   "Tests for I/O functions."
   (:require [clojure.java.io :as io]
-            [b-plus-tree.io :as tree-io]
-            [b-plus-tree.nodes :as tree-nodes])
+            [b-plus-tree io nodes])
   (:use clojure.test))
 
 (deftest read-write
   (testing "basic read/write operations for all node types"
     (let [fname "/tmp/RAF"
-          raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")
           nodes [{:type :root-leaf,
-                  :nextfree -1,
-                  :pagesize 0,
+                  :next-free -1,
                   :keys ["a" "b" "c"],
-                  :children [1 2 3 4]}
+                  :children [1 2 3 4],
+                  :offset 0}
                  {:type :root-nonleaf,
-                  :nextfree -1,
-                  :pagesize 0,
+                  :next-free -1,
                   :keys ["a" "b" "c"],
-                  :children [5 4 6 1]}
+                  :children [5 4 6 1],
+                  :offset 100}
                  {:type :internal,
-                  :keys ["f" "g"]
-                  :children [3 10 17]}
+                  :keys ["f" "g"],
+                  :children [3 10 17],
+                  :offset 200}
                  {:type :leaf,
-                  :keys ["x" "y"]
-                  :children [10 15]
-                  :nextleaf 16}
-                 {:type :record
-                  :data "http://www.wikipedia.org"}]]
+                  :keys ["x" "y"],
+                  :children [10 15],
+                  :next-leaf 16,
+                  :offset 300}
+                 {:type :record,
+                  :data "http://www.wikipedia.org",
+                  :offset 400}]]
+      (io/delete-file fname)
       (with-open [raf (new java.io.RandomAccessFile fname "rwd")]
-        (loop [nodes nodes
-               nextptr 0]
-          (when (not-empty nodes)
-            (recur (rest nodes)
-                   (tree-io/write-node (first nodes) raf nextptr))))
-        (loop [nodes nodes
-               nextptr 0]
-          (when-let [expected-node (first nodes)]
-            (is (= expected-node
-                   (tree-io/read-node raf nextptr)))
-            (recur (rest nodes)
-                   (.getFilePointer raf)))))
+        (doall (map #(b-plus-tree.io/write-node % raf) nodes))
+        (doall (map #(is (= % (b-plus-tree.io/read-node (:offset %) raf)))
+                    nodes)))
       (io/delete-file fname))))

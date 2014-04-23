@@ -6,7 +6,7 @@
 
 (defn read-node
   "Reads the node stored in the RandomAccessFile at the given offset."
-  ([raf offset]
+  ([offset raf]
      (.seek raf offset)
      (let [size (.readShort raf)
            node-bytes (byte-array size)]
@@ -14,18 +14,28 @@
        (assoc (gloss.io/decode nodes/node (gloss.io/to-byte-buffer node-bytes))
          :offset offset))))
 
-(defmacro read-root
+(defn read-root
   "Reads the root node from the RandomAccessFile"
-  ([raf] `(read-node ~raf 0)))
+  ([page-size raf]
+     (if (zero? (.length raf))
+       (b-plus-tree.nodes/new-root page-size)
+       (read-node 0 raf))))
 
 (defn write-node
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."
-  ([node raf offset]
-     (.seek raf offset)
-     (let [encoded-node (gloss.io/encode nodes/node node)
+  ([node raf]
+     (println "lets get writin" node)
+     (let [offset (:offset node)
+           encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
+       (doall
+        (map println
+             ["offset" "encoded" "size"]
+             [offset encoded-node size]))
        (doto raf
+         (.seek offset)
          (.writeShort size)
          (.write (.array (gloss.io/contiguous encoded-node))))
+       (println "it got writ")
        (.getFilePointer raf))))

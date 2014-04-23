@@ -3,30 +3,22 @@
   (:require [b-plus-tree io nodes util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
-
-(defn next-node
-  "Returns the next node when searching the tree for key in node."
-  ([key node raf]
-     (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
-       (when-let [[k ptr] (dbg (first key-ptrs))]
-         (println (map type [key k]))
-         (if (neg? (dbg (compare key k)))
-           (b-plus-tree.io/read-node raf ptr)
-           (if-let [key-ptrs (next key-ptrs)]
-             (recur key-ptrs)
-             (b-plus-tree.io/read-node raf (last (:children node)))))))))
-
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node raf]
      (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
        (when-let [[k ptr] (dbg (first key-ptrs))]
-         (println (map type [key k]))
          (if (neg? (dbg (compare key k)))
            ptr
            (if-let [key-ptrs (next key-ptrs)]
              (recur key-ptrs)
              (-> node :children last)))))))
+
+(defn next-node
+  "Returns the next node when searching the tree for key in node."
+  ([key node raf]
+     (when-let [next-ptr (next-ptr key node raf)]
+       (b-plus-tree.io/read-node next-ptr raf))))
 
 (defn find-leaf
   "Recursively finds the leaf node associated with key by traversing node's
@@ -41,13 +33,12 @@
 (defn find-record
   "Finds the record in leaf's children which goes to key, or nil if not found."
   ([key leaf raf]
-     {:pre [leaf
-            (b-plus-tree.util/in? b-plus-tree.nodes/leaf-types (:type leaf))]}
+     {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
      (->> leaf
           b-plus-tree.nodes/key-ptrs
           (map (fn get-record [[k ptr]]
                  (when (= k key)
-                   (b-plus-tree.io/read-node raf ptr))))
+                   (b-plus-tree.io/read-node ptr raf))))
           (filter identity)
           first)))
 
@@ -71,30 +62,54 @@
          (:data record)))))
 
 (defn insert-record
-  "Inserts a record into the given leaf node and writes changes to file."
-  ([key val leaf raf]))
+  "Inserts a record into the given leaf node and writes changes to file.
+  Returns the next free space."
+  ([key val leaf next-free page-size raf]
+     (let [[new-keys new-ptrs]
+           (if-let [key-ptrs (seq (b-plus-tree.nodes/key-ptrs leaf))]
+             (let [_ (println "key-ptrs" key-ptrs)
+                   split-key-ptrs (split-with #(< % key))
+                   new-key-ptrs (concat (first split-key-ptrs)
+                                        [[key next-free]]
+                                        (last split-key-ptrs))]
+               (apply map list new-key-ptrs))
+             [[key] [next-free]])
+           new-leaf (assoc leaf :keys new-keys :children new-ptrs)
+           record {:type :record, :data val, :offset next-free}]
+       (println "leaf" new-leaf)
+       (println "record" record)
+       (println raf)
+       (b-plus-tree.io/write-node new-leaf raf)
+       (b-plus-tree.io/write-node record raf)
+       (+ next-free page-size))))
 
 (defn insert
   "Inserts key-value pair into the B+ Tree. Returns the new record if
   successful, or nil if key already exists."
-  ([key val order raf]
-     (let [; find the leaf to insert into, while building a stack of
+  ([key val order page-size raf]
+     (let [root (b-plus-tree.io/read-root page-size raf)
+           next-free (:next-free root)
+           ; find the leaf to insert into, while building a stack of
            ; parent pointers
            [leaf stack]
-           (loop [node-ptr 0
-                  stack    []]
-             (let [node  (b-plus-tree.io/read-node node-ptr raf)
-                   stack (conj stack node-ptr)]
-               (if (b-plus-tree.util/in? b-plus-tree.nodes/leaf-types node)
+           (loop [node      root
+                  next-free next-free
+                  stack     []]
+             (let [stack (conj stack node)]
+               (if (b-plus-tree.nodes/leaf? node)
                  ; found leaf
-                 node
+                 [node stack]
                  ; keep searching
-                 (recur (next-ptr key node raf) stack))))]
+                 (recur (next-node key node raf) next-free stack))))]
        (when-not (find-record key leaf raf)
          ; record doesn't exist already, so we can insert
-         (if-not (full? leaf order)
-           (insert-record key val leaf raf)
-           )
+         (let [next-free
+               (if-not (b-plus-tree.nodes/full? leaf order)
+                 (insert-record key val leaf next-free page-size raf)
+                 ; placeholder
+                 next-free)
+               new-root (assoc root :next-free next-free)]
+           (b-plus-tree.io/write-node new-root raf))
          (comment (do-insertion))))))
 
 (defn traverse
@@ -107,15 +122,15 @@
   ([leaf start raf]
      (let [next-fn
            (fn next-fn [leaf start raf found?]
-             (let [next-ptr (:nextleaf leaf)]
+             (let [next-ptr (:next-leaf leaf)]
                (if found?
                  (lazy-cat
                   (->> leaf
                        b-plus-tree.nodes/key-ptrs
                        (map (fn [[k ptr]]
-                              [k (:data (b-plus-tree.io/read-node raf ptr))])))
+                              [k (:data (b-plus-tree.io/read-node ptr raf))])))
                   (when (not= next-ptr -1)
-                    (let [next-leaf (b-plus-tree.io/read-node raf next-ptr)]
+                    (let [next-leaf (b-plus-tree.io/read-node next-ptr raf)]
                       (lazy-seq (next-fn next-leaf start raf true)))))
                  (when-let [pairs (->> leaf
                                    b-plus-tree.nodes/key-ptrs
@@ -123,10 +138,10 @@
                                    #(when-not found? (contains? % start)))]
                    (lazy-cat
                     (map (fn [[k ptr]]
-                           [k (:data (b-plus-tree.io/read-node raf ptr))])
+                           [k (:data (b-plus-tree.io/read-node ptr raf))])
                          pairs)
                     (when (not= next-ptr -1)
-                      (let [next-leaf (b-plus-tree.io/read-node raf next-ptr)]
+                      (let [next-leaf (b-plus-tree.io/read-node next-ptr raf)]
                         (next-fn next-leaf start raf true))))))))]
        (lazy-seq (next-fn leaf start raf false))))
   ([leaf start stop raf]
