@@ -1,6 +1,7 @@
 (ns b-plus-tree.core
   "Primary functions for interacting with the B+ Tree."
-  (:require [b-plus-tree io nodes util]
+  (:require [clojure.set :as set]
+            [b-plus-tree io nodes util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
 (defn next-ptr
@@ -42,14 +43,18 @@
 
 (defn find-type
   "Returns the next node of the given type while searching the tree for key."
-  ([key type node raf]
-     (case (:type node)
-       :leaf (find-record key node raf)
-       :record nil
-       (when-let [nxt (next-node key node raf)]
-         (if (= type (:type nxt))
-           nxt
-           (recur key type nxt raf))))))
+  ([key types node raf]
+     (cond
+      (b-plus-tree.nodes/leaf? (:type node))
+      (when (b-plus-tree.util/in? types :record)
+        (find-record key node raf))
+      
+      (= :record (:type node)) nil
+      
+      :default  (when-let [nxt (next-node key node raf)]
+                  (if (b-plus-tree.util/in? types (:type nxt))
+                    nxt
+                    (recur key type nxt raf))))))
 
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
@@ -71,13 +76,11 @@
                    new-key-ptrs (dbg (concat (first split-key-ptrs)
                                              [[key next-free]]
                                              (second split-key-ptrs)))]
-               (apply map list new-key-ptrs))
+               (dbg (apply map list new-key-ptrs)))
              [[key] [next-free]])
            new-leaf (assoc leaf :keys new-keys :children new-ptrs)
            record {:type :record, :data val, :offset next-free}]
-       (println "leaf" new-leaf)
-       (println "record" record)
-       (println raf)
+       (println "new-leaf" new-leaf)
        (b-plus-tree.io/write-node new-leaf raf)
        (b-plus-tree.io/write-node record raf)
        (+ next-free page-size))))
@@ -107,12 +110,11 @@
                  (insert-record key val leaf next-free page-size raf)
                  ; placeholder
                  next-free)
-               new-root (assoc (if (= :root-leaf (:type root))
+               new-root (assoc (if (= :root-leaf (:type leaf))
                                  leaf
                                  root)
                           :next-free next-free)]
-           (b-plus-tree.io/write-node new-root raf))
-         (comment (do-insertion))))))
+           (b-plus-tree.io/write-node new-root raf))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

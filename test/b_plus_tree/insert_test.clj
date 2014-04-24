@@ -22,7 +22,7 @@
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doall (map (fn [[k v]]
                     (println "inserting" k)
-                    (b-plus-tree.core/insert k v (-> key-vals count inc)
+                    (b-plus-tree.core/insert k v (-> key-vals count (- 2))
                                              100 raf))
                   key-vals))
       (doall (map (fn [[k v]]

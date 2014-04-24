@@ -25,17 +25,16 @@
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."
   ([node raf]
-     (println "lets get writin" node)
      (let [offset (:offset node)
            encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
-       (doall
-        (map println
-             ["offset" "encoded" "size"]
-             [offset encoded-node size]))
+       (comment
+         (doall
+          (map println
+               ["offset" "encoded" "size"]
+               [offset encoded-node size])))
        (doto raf
          (.seek offset)
          (.writeShort size)
          (.write (.array (gloss.io/contiguous encoded-node))))
-       (println "it got writ")
        (.getFilePointer raf))))
