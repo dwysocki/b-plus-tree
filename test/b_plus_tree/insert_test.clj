@@ -22,10 +22,11 @@
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (doall (map (fn [[k v]]
                     (println "inserting" k)
-                    (b-plus-tree.core/insert k v 4 100 raf))
+                    (b-plus-tree.core/insert k v (-> key-vals count inc)
+                                             100 raf))
                   key-vals))
       (doall (map (fn [[k v]]
                     (println "finding" k)
-                    (is (= v (b-plus-tree.core/find k raf))))
+                    (is (= v (b-plus-tree.core/find k 100 raf))))
                   key-vals)))
     (io/delete-file "/tmp/RAF")))

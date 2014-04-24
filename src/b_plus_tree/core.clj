@@ -6,13 +6,11 @@
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node raf]
-     (loop [key-ptrs (dbg (b-plus-tree.nodes/key-ptrs node))]
-       (when-let [[k ptr] (dbg (first key-ptrs))]
-         (if (neg? (dbg (compare key k)))
-           ptr
-           (if-let [key-ptrs (next key-ptrs)]
-             (recur key-ptrs)
-             (-> node :children last)))))))
+     (->> node
+          b-plus-tree.nodes/key-ptrs
+          (filter (fn [[k p]] (neg? (compare key k))))
+          first
+          (fn [[k p]] (dbg (or k (-> node :children last)))))))
 
 (defn next-node
   "Returns the next node when searching the tree for key in node."
@@ -56,8 +54,8 @@
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
   nil if not found."
-  ([key raf]
-     (let [root (b-plus-tree.io/read-root raf)]
+  ([key page-size raf]
+     (let [root (b-plus-tree.io/read-root page-size raf)]
        (when-let [record (find-type key :record root raf)]
          (:data record)))))
 
@@ -65,13 +63,14 @@
   "Inserts a record into the given leaf node and writes changes to file.
   Returns the next free space."
   ([key val leaf next-free page-size raf]
+     (println "leaf:" leaf)
      (let [[new-keys new-ptrs]
            (if-let [key-ptrs (seq (b-plus-tree.nodes/key-ptrs leaf))]
-             (let [_ (println "key-ptrs" key-ptrs)
-                   split-key-ptrs (dbg (split-with #(< % key)))
+             (let [split-key-ptrs (dbg (split-with (fn [[k p]] (compare k key))
+                                                   key-ptrs))
                    new-key-ptrs (dbg (concat (first split-key-ptrs)
                                              [[key next-free]]
-                                             (last split-key-ptrs)))]
+                                             (second split-key-ptrs)))]
                (apply map list new-key-ptrs))
              [[key] [next-free]])
            new-leaf (assoc leaf :keys new-keys :children new-ptrs)
@@ -108,7 +107,10 @@
                  (insert-record key val leaf next-free page-size raf)
                  ; placeholder
                  next-free)
-               new-root (assoc root :next-free next-free)]
+               new-root (assoc (if (= :root-leaf (:type root))
+                                 leaf
+                                 root)
+                          :next-free next-free)]
            (b-plus-tree.io/write-node new-root raf))
          (comment (do-insertion))))))
 
@@ -119,7 +121,7 @@
   there are no more leaves left.
 
   Not working."
-  ([leaf start raf]
+  ([leaf start page-size raf]
      (let [next-fn
            (fn next-fn [leaf start raf found?]
              (let [next-ptr (:next-leaf leaf)]
@@ -144,17 +146,21 @@
                       (let [next-leaf (b-plus-tree.io/read-node next-ptr raf)]
                         (next-fn next-leaf start raf true))))))))]
        (lazy-seq (next-fn leaf start raf false))))
-  ([leaf start stop raf]
+  ([leaf start stop page-size raf]
      (take-while (fn [[k v]] (-> k (compare stop) neg?))
-                 (traverse leaf start raf))))
+                 (traverse leaf start page-size raf))))
 
 (defn find-slice
   ""
-  ([start raf]
-     (when-let [leaf (find-type start :leaf (b-plus-tree.io/read-root raf) raf)]
-       (println "leaf:" leaf)
-       (traverse start leaf raf)))
-  ([start stop raf]
-     (when-let [leaf (find-type start :leaf (b-plus-tree.io/read-root raf) raf)]
-       (println "leaf:" leaf)
-       (traverse start stop leaf raf))))
+  ([start page-size raf]
+     (when-let [leaf (find-type start
+                                :leaf
+                                (b-plus-tree.io/read-root page-size raf)
+                                raf)]
+       (traverse start leaf page-size raf)))
+  ([start stop page-size raf]
+     (when-let [leaf (find-type start
+                                :leaf
+                                (b-plus-tree.io/read-root page-size raf)
+                                raf)]
+       (traverse start stop leaf page-size raf))))
