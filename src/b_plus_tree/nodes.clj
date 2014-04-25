@@ -78,6 +78,18 @@
   which is less-than key, or in the case of leaf-nodes, contains key's value"
   ([node] (map list (:keys node) (:children node))))
 
+(defn insert-leaf
+  "Given a leaf node, returns that node with key and ptr inserted at the
+  correct position in :keys and :children."
+  ([key ptr leaf]
+     (let [[new-keys new-ptrs]
+           (if-let [key-ptrs (dbg (seq (key-ptrs leaf)))]
+             (let [key-ptr-map (apply sorted-map (flatten key-ptrs))
+                   new-key-ptr-map (assoc key-ptr-map key ptr)]
+               [(keys new-key-ptr-map) (vals new-key-ptr-map)])
+             [[key] [ptr]])]
+       (assoc leaf :keys new-keys :children new-ptrs))))
+
 (defn min-children
   "Returns the minimum number of children a given node is allowed to have."
   ([node order]

@@ -7,11 +7,12 @@
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node raf]
-     (->> node
-          b-plus-tree.nodes/key-ptrs
-          (filter (fn [[k p]] (neg? (compare key k))))
-          first
-          (fn [[k p]] (dbg (or k (-> node :children last)))))))
+     (dbg
+      (->> node
+           b-plus-tree.nodes/key-ptrs
+           (filter (fn [[k p]] (neg? (compare key k))))
+           first
+           (fn [[k p]] (dbg (or k (-> node :children last))))))))
 
 (defn next-node
   "Returns the next node when searching the tree for key in node."
@@ -69,22 +70,15 @@
   Returns the next free space."
   ([key val leaf next-free page-size raf]
      (println "leaf:" leaf)
-     (let [[new-keys new-ptrs]
-           (if-let [key-ptrs (seq (b-plus-tree.nodes/key-ptrs leaf))]
-             (let [split-key-ptrs (dbg (split-with (fn [[k p]] (compare k key))
-                                                   key-ptrs))
-                   new-key-ptrs (dbg (concat (first split-key-ptrs)
-                                             [[key next-free]]
-                                             (second split-key-ptrs)))]
-               (dbg (apply map list new-key-ptrs)))
-             [[key] [next-free]])
-           new-leaf (assoc leaf :keys new-keys :children new-ptrs)
+     (let [new-leaf (b-plus-tree.nodes/insert-leaf key next-free leaf)
            record {:type :record, :data val, :offset next-free}]
        (println "new-leaf" new-leaf)
        (b-plus-tree.io/write-node new-leaf raf)
        (b-plus-tree.io/write-node record raf)
        (+ next-free page-size))))
 
+; problem: I am re-writing the root on disc, but then using the same
+; in-memory root every time
 (defn insert
   "Inserts key-value pair into the B+ Tree. Returns the new record if
   successful, or nil if key already exists."
