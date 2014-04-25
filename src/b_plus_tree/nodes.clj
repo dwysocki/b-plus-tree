@@ -7,41 +7,43 @@
   (gloss.core/enum :byte
                    :root-leaf :root-nonleaf :internal :leaf :record))
 
+(gloss.core/defcodec- raf-offset
+  :int64)
+
 (gloss.core/defcodec- C-string
   (gloss.core/string :ascii :delimiters ["\0"]))
 
-(gloss.core/defcodec- key-list
-  (gloss.core/repeated C-string))
+(gloss.core/defcodec- key-val
+  [C-string raf-offset])
 
-(gloss.core/defcodec- child-list
-  (gloss.core/repeated :int64))
+(gloss.core/defcodec- key-vals
+  (gloss.core/repeated key-val
+                       :delimiters ["\n"]))
 
 (gloss.core/defcodec root-leaf-node
   (gloss.core/ordered-map
    :type      :root-leaf
-   :next-free :int64
-   :keys      key-list
-   :children  child-list))
+   :next-free raf-offset
+   :key-ptrs  key-vals))
 
 (gloss.core/defcodec root-nonleaf-node
   (gloss.core/ordered-map
    :type      :root-nonleaf
-   :next-free :int64
-   :keys      key-list
-   :children  child-list))
+   :next-free raf-offset
+   :key-ptrs  key-vals
+   :last      raf-offset))
 
 (gloss.core/defcodec internal-node
   (gloss.core/ordered-map
    :type     :internal
-   :keys     key-list
-   :children child-list))
+   :key-ptrs  key-vals
+   :last      raf-offset))
 
 (gloss.core/defcodec leaf-node
   (gloss.core/ordered-map
    :type      :leaf
-   :keys      key-list
-   :children  child-list
-   :next-leaf :int64))
+   :key-ptrs  key-vals
+   :next      raf-offset))
 
 (gloss.core/defcodec record-node
   (gloss.core/ordered-map
@@ -62,33 +64,21 @@
   ([page-size]
      {:type      :root-leaf,
       :next-free  page-size,
-      :keys              [],
-      :children          [],
+      :key-ptrs          [], ; might have to be [[]] instead
       :offset             0}))
 
-(def leaf-types
-  #{:root-leaf :leaf})
+(def leaf-types #{:root-leaf :leaf})
 
 (defn leaf?
   "Returns true if node is a leaf-type, else nil."
   ([node] (b-plus-tree.util/in? leaf-types (:type node))))
 
-(defn key-ptrs
-  "Given a node, returns key-ptr pairs, where each ptr points to the node
-  which is less-than key, or in the case of leaf-nodes, contains key's value"
-  ([node] (map list (:keys node) (:children node))))
-
-(defn insert-leaf
+(defn leaf-assoc
   "Given a leaf node, returns that node with key and ptr inserted at the
   correct position in :keys and :children."
-  ([key ptr leaf]
-     (let [[new-keys new-ptrs]
-           (if-let [key-ptrs (dbg (seq (key-ptrs leaf)))]
-             (let [key-ptr-map (apply sorted-map (flatten key-ptrs))
-                   new-key-ptr-map (assoc key-ptr-map key ptr)]
-               [(keys new-key-ptr-map) (vals new-key-ptr-map)])
-             [[key] [ptr]])]
-       (assoc leaf :keys new-keys :children new-ptrs))))
+  {:arglists '([key ptr leaf])}
+  ([key ptr {:keys [key-ptrs] :as leaf}]
+     (assoc leaf :key-ptrs (assoc key-ptrs key ptr))))
 
 (defn min-children
   "Returns the minimum number of children a given node is allowed to have."

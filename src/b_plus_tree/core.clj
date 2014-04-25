@@ -32,8 +32,7 @@
 
 (defn find-record
   "Finds the record in leaf's children which goes to key, or nil if not found."
-  ([key leaf raf]
-     {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
+  ([key leaf raf] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
      (->> leaf
           b-plus-tree.nodes/key-ptrs
           (map (fn get-record [[k ptr]]
@@ -45,6 +44,7 @@
 (defn find-type
   "Returns the next node of the given type while searching the tree for key."
   ([key types node raf]
+     (println "traversing from" node)
      (cond
       (b-plus-tree.nodes/leaf? (:type node))
       (when (b-plus-tree.util/in? types :record)
@@ -120,7 +120,7 @@
   ([leaf start page-size raf]
      (let [next-fn
            (fn next-fn [leaf start raf found?]
-             (let [next-ptr (:next-leaf leaf)]
+             (let [next-ptr (:next leaf)]
                (if found?
                  (lazy-cat
                   (->> leaf
