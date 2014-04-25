@@ -28,3 +28,23 @@ Planning
 ```clojure
 (let [new-leaf (assoc leaf :keys new-keys :children new-vals)] ...)
 ```
+
+# April 24, 2014
+
+## Keyval Serialization
+- Going to change serialization of keys/pointers to a seq of keyvals, which
+  will be parsed into a map simply using `(apply sorted-map keyvals)`
+```clojure
+(defcodec node {:type node-types,
+                :keyvals keyval-seq})
+```
+## Future Plan: 
+- After insert is finished, work on separate word-scraper library,
+  which has functions to fetch words from webpages.
+- Also use this library in wiki-path. This will save a lot of code
+  copying, but will require messing around with deps.
+  - Will allow me to work on both at same time, too. Working on one
+    project can improve the other
+  - Possible pitfalls when I want to make major changes to
+    word-scraper, because I'll have to change two projects. So it is
+    probably best to work mainly on b-plus-tree
