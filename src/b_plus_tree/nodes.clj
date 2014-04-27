@@ -7,43 +7,74 @@
   (gloss.core/enum :byte
                    :root-leaf :root-nonleaf :internal :leaf :record))
 
-(gloss.core/defcodec- raf-offset
-  :int64)
+(gloss.core/defcodec- raf-offset :int64)
 
 (gloss.core/defcodec- C-string
-  (gloss.core/string :ascii :delimiters ["\0"]))
+  (gloss.core/string :ascii
+                     :delimiters ["\0"]))
 
-(gloss.core/defcodec- key-val
-  [C-string raf-offset])
+(gloss.core/defcodec- node-keys
+  (gloss.core/repeated C-string))
 
-(gloss.core/defcodec- key-vals
-  (gloss.core/repeated key-val
-                       :delimiters ["\n"]))
+(gloss.core/defcodec- node-ptrs
+  (gloss.core/repeated raf-offset))
 
-(gloss.core/defcodec root-leaf-node
-  (gloss.core/ordered-map
-   :type      :root-leaf
-   :next-free raf-offset
-   :key-ptrs  key-vals))
+(defn- node-map
+  "Turns a node's :keys and :ptrs into a map :key-ptrs, removing the original
+  fields."
+  ([{:keys [keys ptrs] :as node}]
+     (-> node
+         (assoc :key-ptrs (into (sorted-map) (zipmap keys ptrs)))
+         (dissoc :keys :ptrs))))
 
-(gloss.core/defcodec root-nonleaf-node
-  (gloss.core/ordered-map
-   :type      :root-nonleaf
-   :next-free raf-offset
-   :key-ptrs  key-vals
-   :last      raf-offset))
+(defn- node-unmap
+  "Turns a node's :key-ptrs into :keys and :ptrs, removing the original field."
+  ([{:keys [key-ptrs] :as node}]
+     (-> node
+         (assoc :keys (keys key-ptrs)
+                :ptrs (vals key-ptrs))
+         (dissoc :key-ptrs))))
 
-(gloss.core/defcodec internal-node
-  (gloss.core/ordered-map
-   :type     :internal
-   :key-ptrs  key-vals
-   :last      raf-offset))
+(def root-leaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :root-leaf
+    :free raf-offset
+    :keys node-keys
+    :ptrs node-ptrs)
+   node-unmap
+   node-map))
 
-(gloss.core/defcodec leaf-node
-  (gloss.core/ordered-map
-   :type      :leaf
-   :key-ptrs  key-vals
-   :next      raf-offset))
+(def root-nonleaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :root-nonleaf
+    :free raf-offset
+    :keys node-keys
+    :ptrs node-ptrs
+    :last raf-offset)
+   node-unmap
+   node-map))
+
+(def internal-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :internal
+    :keys node-keys
+    :ptrs node-ptrs
+    :last raf-offset)
+   node-unmap
+   node-map))
+
+(def leaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :leaf
+    :keys node-keys
+    :ptrs node-ptrs
+    :next raf-offset)
+   node-unmap
+   node-map))
 
 (gloss.core/defcodec record-node
   (gloss.core/ordered-map
@@ -63,11 +94,11 @@
   "Returns a new leaf root."
   ([page-size]
      {:type      :root-leaf,
-      :next-free  page-size,
-      :key-ptrs          [], ; might have to be [[]] instead
-      :offset             0}))
+      :next-free page-size,
+      :key-ptrs  (sorted-map),
+      :offset    0}))
 
-(def leaf-types #{:root-leaf :leaf})
+(def leaf-types #{:root-leaf, :leaf})
 
 (defn leaf?
   "Returns true if node is a leaf-type, else nil."
@@ -79,6 +110,14 @@
   {:arglists '([key ptr leaf])}
   ([key ptr {:keys [key-ptrs] :as leaf}]
      (assoc leaf :key-ptrs (assoc key-ptrs key ptr))))
+
+(defn count-children
+  "Returns the number of children node has"
+  ([node]
+     (let [N (count (:key-ptrs node))]
+       (if (:last node)
+         (inc N)
+         N))))
 
 (defn min-children
   "Returns the minimum number of children a given node is allowed to have."
@@ -103,5 +142,5 @@
 (defn full?
   "Returns true if the node is full."
   ([node order]
-     (let [num-children (-> node :children count)]
-       (>= num-children (max-children node order)))))
+     (>= (-> node :key-ptrs count)
+         (max-children node order))))

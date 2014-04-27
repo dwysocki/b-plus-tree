@@ -4,17 +4,18 @@
             [b-plus-tree.nodes :as nodes]
             [b-plus-tree.util :refer [dbg verbose]]))
 
+
+
 (defn read-node
   "Reads the node stored in the RandomAccessFile at the given offset."
   ([offset raf]
      (.seek raf offset)
      (let [size (.readShort raf)
-           node-bytes (doto (byte-array size) #(.readFully raf %))
+           _ (println "read-size:" size)
+           node-bytes (doto (byte-array size)
+                        #(.readFully raf %))
            node (gloss.io/decode nodes/node
-                                 (gloss.io/to-byte-buffer node-bytes))
-           node (if-let [key-ptrs (:key-ptrs node)]
-                  (assoc node :key-ptrs (apply sorted-map key-ptrs))
-                  node)]
+                                 (gloss.io/to-byte-buffer node-bytes))]
        (assoc node :offset offset))))
 
 (defn read-root
@@ -28,12 +29,10 @@
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."
   ([node raf]
-     (let [node (if-let [key-ptrs (:key-ptrs node)]
-                  (assoc node :key-ptrs (seq key-ptrs))
-                  node)
-           offset (:offset node)
+     (let [offset (:offset node)
            encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
+       (println "write-size:" size)
        (comment
          (doall
           (map println

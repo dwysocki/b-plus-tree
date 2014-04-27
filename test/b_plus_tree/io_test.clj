@@ -8,17 +8,17 @@
   (testing "basic read/write operations for all node types"
     (let [fname "/tmp/RAF"
           nodes [{:type :root-leaf,
-                  :next-free -1,
-                  :key-ptrs (sorted-map "a" 1, "b" 2, "c" 3)
+                  :free -1,
+                  :key-ptrs (sorted-map "a" 1, "b" 2, "c" 3),
                   :offset 0}
                  {:type :root-nonleaf,
-                  :next-free -1,
-                  :key-ptrs (sorted-map "a" 5, "b" 4, "c" 6)
-                  :last 1
+                  :free -1,
+                  :key-ptrs (sorted-map "a" 5, "b" 4, "c" 6),
+                  :last 1,
                   :offset 500}
                  {:type :internal,
-                  :key-ptrs (sorted-map "f" 3, "g" 10)
-                  :last 17
+                  :key-ptrs (sorted-map "f" 3, "g" 10),
+                  :last 17,
                   :offset 1000}
                  {:type :leaf,
                   :key-ptrs (sorted-map "x" 10, "y" 15),
