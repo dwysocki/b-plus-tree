@@ -7,6 +7,9 @@
   (gloss.core/enum :byte
                    :root-leaf :root-nonleaf :internal :leaf :record))
 
+(gloss.core/defcodec- raf-offset
+  :int64)
+
 (gloss.core/defcodec- C-string
   (gloss.core/string :ascii :delimiters ["\0"]))
 
@@ -14,48 +17,79 @@
   (gloss.core/repeated C-string))
 
 (gloss.core/defcodec- child-list
-  (gloss.core/repeated :int64))
+  (gloss.core/repeated raf-offset))
 
-(gloss.core/defcodec root-leaf-node
-  (gloss.core/ordered-map
-   :type      :root-leaf
-   :next-free :int64
-   :keys      key-list
-   :children  child-list))
+(defn- node-map
+  "Turns a node's :keys and :ptrs into a map :key-ptrs, removing the original
+fields."
+  ([{:keys [keys ptrs] :as node}]
+     (-> node
+         (assoc :key-ptrs (into (sorted-map) (zipmap keys ptrs)))
+         (dissoc :keys :ptrs))))
 
-(gloss.core/defcodec root-nonleaf-node
-  (gloss.core/ordered-map
-   :type      :root-nonleaf
-   :next-free :int64
-   :keys      key-list
-   :children  child-list))
+(defn- node-unmap
+  "Turns a node's :key-ptrs into :keys and :ptrs, removing the original field."
+  ([{:keys [key-ptrs] :as node}]
+     (-> node
+         (assoc :keys (keys key-ptrs)
+                :ptrs (vals key-ptrs))
+         (dissoc :key-ptrs))))
 
-(gloss.core/defcodec internal-node
-  (gloss.core/ordered-map
-   :type     :internal
-   :keys     key-list
-   :children child-list))
+(def root-leaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :root-leaf
+    :free raf-offset
+    :keys key-list
+    :ptrs child-list)
+   node-unmap
+   node-map))
 
-(gloss.core/defcodec leaf-node
-  (gloss.core/ordered-map
-   :type      :leaf
-   :keys      key-list
-   :children  child-list
-   :next-leaf :int64))
+(def root-nonleaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :root-nonleaf
+    :free raf-offset
+    :keys key-list
+    :ptrs child-list
+    :last raf-offset)
+   node-unmap
+   node-map))
+
+(def internal-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :internal
+    :keys key-list
+    :ptrs child-list
+    :last raf-offset)
+   node-unmap
+   node-map))
+
+(def leaf-node
+  (gloss.core/compile-frame
+   (gloss.core/ordered-map
+    :type :leaf
+    :keys key-list
+    :ptrs child-list
+    :next raf-offset)
+   node-unmap
+   node-map))
 
 (gloss.core/defcodec record-node
   (gloss.core/ordered-map
    :type :record
    :data C-string))
 
-(gloss.core/defcodec node
-  (gloss.core/header node-types
-                     {:root-leaf    root-leaf-node
-                      :root-nonleaf root-nonleaf-node
-                      :internal     internal-node
-                      :leaf         leaf-node
-                      :record       record-node}
-                     :type))
+(def node
+  (gloss.core/compile-frame
+   (gloss.core/header node-types
+                      {:root-leaf    root-leaf-node
+                       :root-nonleaf root-nonleaf-node
+                       :internal     internal-node
+                       :leaf         leaf-node
+                       :record       record-node}
+                      :type)))
 
 (defn new-root
   "Returns a new leaf root."
