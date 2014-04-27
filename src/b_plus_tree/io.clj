@@ -9,12 +9,10 @@
   ([offset raf]
      (.seek raf offset)
      (let [size (.readShort raf)
-           _ (println "read-size:" size)
-           node-bytes (doto (byte-array size)
-                        #(.readFully raf %))
-           node (gloss.io/decode nodes/node
-                                 (gloss.io/to-byte-buffer node-bytes))]
-       (assoc node :offset offset))))
+           node-bytes (byte-array size)]
+       (.readFully raf node-bytes)
+       (assoc (gloss.io/decode nodes/node (gloss.io/to-byte-buffer node-bytes))
+         :offset offset))))
 
 (defn read-root
   "Reads the root node from the RandomAccessFile"
@@ -30,11 +28,6 @@
      (let [offset (:offset node)
            encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
-       (println "write-size:" size)
-       (println "array-size" (-> encoded-node
-                                 gloss.io/contiguous
-                                 .array
-                                 gloss.core/byte-count))
        (comment
          (doall
           (map println
