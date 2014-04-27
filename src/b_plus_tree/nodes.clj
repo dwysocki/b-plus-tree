@@ -14,10 +14,12 @@
                      :delimiters ["\0"]))
 
 (gloss.core/defcodec- node-keys
-  (gloss.core/repeated C-string))
+  (gloss.core/repeated C-string
+                       :prefix :int32))
 
 (gloss.core/defcodec- node-ptrs
-  (gloss.core/repeated raf-offset))
+  (gloss.core/repeated raf-offset
+                       :prefix :int32))
 
 (defn- node-map
   "Turns a node's :keys and :ptrs into a map :key-ptrs, removing the original
@@ -41,9 +43,7 @@
     :type :root-leaf
     :free raf-offset
     :keys node-keys
-    :ptrs node-ptrs)
-   node-unmap
-   node-map))
+    :ptrs node-ptrs)))
 
 (def root-nonleaf-node
   (gloss.core/compile-frame
@@ -52,9 +52,7 @@
     :free raf-offset
     :keys node-keys
     :ptrs node-ptrs
-    :last raf-offset)
-   node-unmap
-   node-map))
+    :last raf-offset)))
 
 (def internal-node
   (gloss.core/compile-frame
@@ -62,9 +60,7 @@
     :type :internal
     :keys node-keys
     :ptrs node-ptrs
-    :last raf-offset)
-   node-unmap
-   node-map))
+    :last raf-offset)))
 
 (def leaf-node
   (gloss.core/compile-frame
@@ -72,23 +68,24 @@
     :type :leaf
     :keys node-keys
     :ptrs node-ptrs
-    :next raf-offset)
-   node-unmap
-   node-map))
+    :next raf-offset)))
 
 (gloss.core/defcodec record-node
   (gloss.core/ordered-map
    :type :record
    :data C-string))
 
-(gloss.core/defcodec node
-  (gloss.core/header node-types
-                     {:root-leaf    root-leaf-node
-                      :root-nonleaf root-nonleaf-node
-                      :internal     internal-node
-                      :leaf         leaf-node
-                      :record       record-node}
-                     :type))
+(def node
+  (gloss.core/compile-frame
+   (gloss.core/header node-types
+                      {:root-leaf    root-leaf-node
+                       :root-nonleaf root-nonleaf-node
+                       :internal     internal-node
+                       :leaf         leaf-node
+                       :record       record-node}
+                      :type)
+   node-unmap
+   node-map))
 
 (defn new-root
   "Returns a new leaf root."

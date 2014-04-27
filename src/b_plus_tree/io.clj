@@ -4,8 +4,6 @@
             [b-plus-tree.nodes :as nodes]
             [b-plus-tree.util :refer [dbg verbose]]))
 
-
-
 (defn read-node
   "Reads the node stored in the RandomAccessFile at the given offset."
   ([offset raf]
@@ -33,6 +31,10 @@
            encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
        (println "write-size:" size)
+       (println "array-size" (-> encoded-node
+                                 gloss.io/contiguous
+                                 .array
+                                 gloss.core/byte-count))
        (comment
          (doall
           (map println
