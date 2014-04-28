@@ -7,12 +7,19 @@
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node raf]
-     (dbg
-      (->> node
-           b-plus-tree.nodes/key-ptrs
-           (filter (fn [[k p]] (neg? (compare key k))))
-           first
-           (fn [[k p]] (dbg (or k (-> node :children last))))))))
+     (let [key-ptrs (:key-ptrs node)]
+       (if-let [ptr (loop [[k ptr]  (first key-ptrs)
+                           key-ptrs (next key-ptrs)]
+                      (let [c (compare key k)]
+                        (cond
+                         (pos? c) (when (seq key-ptrs)
+                                    (recur (first key-ptrs)
+                                           (next key-ptrs)))
+                         (zero? c) (-> key-ptrs first second)
+                         ; must be negative
+                         :default ptr)))]
+         ptr
+         (:last node)))))
 
 (defn next-node
   "Returns the next node when searching the tree for key in node."
@@ -26,16 +33,15 @@
   contains key, else returns nil."
   ([key node raf]
      (if (contains? b-plus-tree.nodes/leaf-types (:type node))
-       (when (dbg (b-plus-tree.util/in? (:keys node) key))
+       (when (b-plus-tree.util/in? (:keys node) key)
          node)
        (recur key (next-node key node raf) raf))))
 
 (defn find-record
   "Finds the record in leaf's children which goes to key, or nil if not found."
-  ([key leaf raf]
-     {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
+  ([key leaf raf] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
      (->> leaf
-          b-plus-tree.nodes/key-ptrs
+          :key-ptrs
           (map (fn get-record [[k ptr]]
                  (when (= k key)
                    (b-plus-tree.io/read-node ptr raf))))
@@ -46,23 +52,24 @@
   "Returns the next node of the given type while searching the tree for key."
   ([key types node raf]
      (cond
-      (b-plus-tree.nodes/leaf? (:type node))
+      (b-plus-tree.nodes/leaf? node)
       (when (b-plus-tree.util/in? types :record)
         (find-record key node raf))
       
       (= :record (:type node)) nil
       
-      :default  (when-let [nxt (next-node key node raf)]
-                  (if (b-plus-tree.util/in? types (:type nxt))
-                    nxt
-                    (recur key type nxt raf))))))
+      :default
+      (when-let [nxt (next-node key node raf)]
+        (if (b-plus-tree.util/in? types (:type nxt))
+          nxt
+          (recur key types nxt raf))))))
 
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
   nil if not found."
   ([key page-size raf]
      (let [root (b-plus-tree.io/read-root page-size raf)]
-       (when-let [record (find-type key :record root raf)]
+       (when-let [record (find-type key #{:record} root raf)]
          (:data record)))))
 
 (defn insert-record
@@ -70,7 +77,7 @@
   Returns the next free space."
   ([key val leaf next-free page-size raf]
      (println "leaf:" leaf)
-     (let [new-leaf (b-plus-tree.nodes/insert-leaf key next-free leaf)
+     (let [new-leaf (b-plus-tree.nodes/leaf-assoc key next-free leaf)
            record {:type :record, :data val, :offset next-free}]
        (println "new-leaf" new-leaf)
        (b-plus-tree.io/write-node new-leaf raf)

@@ -39,6 +39,7 @@ fields."
   (gloss.core/compile-frame
    (gloss.core/ordered-map
     :type :root-leaf
+    :page-size :int32
     :free raf-offset
     :keys key-list
     :ptrs child-list)
@@ -49,6 +50,7 @@ fields."
   (gloss.core/compile-frame
    (gloss.core/ordered-map
     :type :root-nonleaf
+    :page-size :int32
     :free raf-offset
     :keys key-list
     :ptrs child-list
