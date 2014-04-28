@@ -91,30 +91,30 @@
   successful, or nil if key already exists."
   ([key val order page-size raf]
      (let [root (b-plus-tree.io/read-root page-size raf)
-           next-free (:next-free root)
+           free (:free root)
            ; find the leaf to insert into, while building a stack of
            ; parent pointers
            [leaf stack]
-           (loop [node      root
-                  next-free next-free
-                  stack     []]
+           (loop [node  root
+                  free  free
+                  stack []]
              (let [stack (conj stack node)]
                (if (b-plus-tree.nodes/leaf? node)
                  ; found leaf
                  [node stack]
                  ; keep searching
-                 (recur (next-node key node raf) next-free stack))))]
+                 (recur (next-node key node raf) free stack))))]
        (when-not (find-record key leaf raf)
          ; record doesn't exist already, so we can insert
-         (let [next-free
+         (let [free
                (if-not (b-plus-tree.nodes/full? leaf order)
-                 (insert-record key val leaf next-free page-size raf)
+                 (insert-record key val leaf free page-size raf)
                  ; placeholder
-                 next-free)
+                 free)
                new-root (assoc (if (= :root-leaf (:type leaf))
                                  leaf
                                  root)
-                          :next-free next-free)]
+                          :free free)]
            (b-plus-tree.io/write-node new-root raf))))))
 
 (defn traverse
