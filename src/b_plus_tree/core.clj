@@ -4,22 +4,34 @@
             [b-plus-tree io nodes util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
+(comment
+  (defn old-next-ptr
+    "Returns the next pointer when searching the tree for key in node.
+    Being replaced."
+    ([key node raf]
+       (let [key-ptrs (:key-ptrs node)]
+         (if-let [ptr (loop [[k ptr]  (first key-ptrs)
+                             key-ptrs (next key-ptrs)]
+                        (let [c (compare key k)]
+                          (cond
+                           (pos? c) (when (seq key-ptrs)
+                                      (recur (first key-ptrs)
+                                             (next key-ptrs)))
+                           (zero? c) (-> key-ptrs first second)
+                           ; must be negative
+                           :default ptr)))]
+           ptr
+           (:last node))))))
+
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node raf]
-     (let [key-ptrs (:key-ptrs node)]
-       (if-let [ptr (loop [[k ptr]  (first key-ptrs)
-                           key-ptrs (next key-ptrs)]
-                      (let [c (compare key k)]
-                        (cond
-                         (pos? c) (when (seq key-ptrs)
-                                    (recur (first key-ptrs)
-                                           (next key-ptrs)))
-                         (zero? c) (-> key-ptrs first second)
-                         ; must be negative
-                         :default ptr)))]
-         ptr
-         (:last node)))))
+     (if-let [[k ptr] (->> node
+                           :key-ptrs
+                           (filter (fn [[k ptr]] (pos? (compare k key))))
+                           first)]
+       ptr
+       (:last node))))
 
 (defn next-node
   "Returns the next node when searching the tree for key in node."
