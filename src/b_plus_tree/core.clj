@@ -120,14 +120,19 @@
          ; record doesn't exist already, so we can insert
          (let [free
                (if-not (b-plus-tree.nodes/full? leaf order)
-                 (insert-record key val leaf free page-size raf)
+                 (insert-record key val
+                                (assoc leaf
+                                  :free free)
+                                free page-size raf)
                  ; placeholder
                  free)
                new-root (assoc (if (= :root-leaf (:type leaf))
                                  leaf
                                  root)
                           :free free)]
-           (b-plus-tree.io/write-node new-root raf))))))
+           (when-not (= :root-leaf (:type leaf))
+             (b-plus-tree.io/write-node (assoc root
+                                          :free free))))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

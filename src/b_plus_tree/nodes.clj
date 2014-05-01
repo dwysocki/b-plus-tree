@@ -97,10 +97,10 @@ fields."
   "Returns a new leaf root."
   ([page-size]
      {:type      :root-leaf,
-      :next-free  page-size,
-      :keys              [],
-      :children          [],
-      :offset             0}))
+      :page-size page-size
+      :free      page-size,
+      :key-ptrs  (sorted-map)
+      :offset    0}))
 
 (def leaf-types
   #{:root-leaf :leaf})
