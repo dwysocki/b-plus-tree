@@ -56,3 +56,15 @@
   "Returns true if item is in coll, otherwise false."
   ([coll item]
      (some #(= item %) coll)))
+
+(defn unique-strings
+  "Returns a seq of unique strings of the given length. "
+  ([length]
+     (let [formatter (new java.text.DecimalFormat
+                          (apply str (repeat length 0)))
+           step (fn step [n]
+                  (cons (.format formatter n)
+                        (-> n inc step lazy-seq)))]
+       (lazy-seq (step 0))))
+  ([n length]
+     (take n (unique-strings length))))

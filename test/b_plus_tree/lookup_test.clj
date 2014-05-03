@@ -4,70 +4,77 @@
             [b-plus-tree core io nodes])
   (:use clojure.test))
 
+(def header-node
+  {:count     6
+   :free      1500
+   :order     3
+   :key-size  1
+   :val-size  16
+   :page-size 100
+   :root      100})
+
 (def root-node
-  [{:type :root-nonleaf
-    :free -1
-    :page-size 100
-    :key-ptrs (sorted-map "c" 100)
-    :last 200
-    :offset 0}])
+  {:type :root-nonleaf
+   :key-ptrs (sorted-map "c" 200)
+   :last 300
+   :offset 100})
 
 (def internal-nodes
   [{:type :internal
-    :key-ptrs (sorted-map "b" 300)
-    :last 400
-    :offset 100}
+    :key-ptrs (sorted-map "b" 400)
+    :last 500
+    :offset 200}
    {:type :internal
-    :key-ptrs (sorted-map "d" 500,
-                          "e" 600)
-    :last 700
-    :offset 200}])
+    :key-ptrs (sorted-map "d" 600,
+                          "e" 700)
+    :last 800
+    :offset 300}])
 
 (def leaf-nodes
   [{:type :leaf
-    :key-ptrs (sorted-map "a" 800)
-    :next 400
-    :offset 300}
-   {:type :leaf
-    :key-ptrs (sorted-map "b" 900)
+    :key-ptrs (sorted-map "a" 900)
     :next 500
     :offset 400}
    {:type :leaf
-    :key-ptrs (sorted-map "c" 1000)
+    :key-ptrs (sorted-map "b" 1000)
     :next 600
     :offset 500}
    {:type :leaf
-    :key-ptrs (sorted-map "d" 1100)
+    :key-ptrs (sorted-map "c" 1100)
     :next 700
     :offset 600}
    {:type :leaf
-    :key-ptrs (sorted-map "e" 1200,
-                          "f" 1300)
+    :key-ptrs (sorted-map "d" 1200)
+    :next 800
+    :offset 700}
+   {:type :leaf
+    :key-ptrs (sorted-map "e" 1300,
+                          "f" 1400)
     :next -1
-    :offset 700}])
+    :offset 800}])
 
 (def record-nodes
   [{:type :record
     :data "http://www.a.com"
-    :offset 800}
-   {:type :record
-    :data "http://www.b.com"
     :offset 900}
    {:type :record
-    :data "http://www.c.com"
+    :data "http://www.b.com"
     :offset 1000}
    {:type :record
-    :data "http://www.d.com"
+    :data "http://www.c.com"
     :offset 1100}
    {:type :record
-    :data "http://www.e.com"
+    :data "http://www.d.com"
     :offset 1200}
    {:type :record
+    :data "http://www.e.com"
+    :offset 1300}
+   {:type :record
     :data "http://www.f.com"
-    :offset 1300}])
+    :offset 1400}])
 
 (def nodes
-  (concat root-node internal-nodes leaf-nodes record-nodes))
+  (concat [root-node] internal-nodes leaf-nodes record-nodes))
 
 (defn populate-file
   "Writes all nodes to file"
@@ -79,14 +86,16 @@
 (deftest find
   (testing "finding all records"
     (with-open [raf (new java.io.RandomAccessFile "/tmp/raf" "rwd")]
+      (b-plus-tree.io/write-header header-node raf)
       (populate-file nodes raf)
-      (doseq [[k v] {"a" "http://www.a.com",
-                     "b" "http://www.b.com",
-                     "c" "http://www.c.com",
-                     "d" "http://www.d.com",
-                     "e" "http://www.e.com",
-                     "f" "http://www.f.com"}]
-        (is (= (b-plus-tree.core/find k 100 raf) v))))
+      (let [header (b-plus-tree.io/read-header raf)]
+        (doseq [[k v] {"a" "http://www.a.com",
+                       "b" "http://www.b.com",
+                       "c" "http://www.c.com",
+                       "d" "http://www.d.com",
+                       "e" "http://www.e.com",
+                       "f" "http://www.f.com"}]
+          (is (= (b-plus-tree.core/find k raf header) v)))))
     (io/delete-file "/tmp/RAF" true)))
 
 (deftest find-record-test

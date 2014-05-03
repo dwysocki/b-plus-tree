@@ -79,10 +79,13 @@
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
   nil if not found."
-  ([key page-size raf]
-     (let [root (b-plus-tree.io/read-root page-size raf)]
-       (when-let [record (find-type key #{:record} root raf)]
-         (:data record)))))
+  ([key raf {cnt :count, size :key-size, root-ptr :root
+             :as header}]
+     (when-not (or (zero? cnt)
+                   (> (count key) size))
+       (let [root (b-plus-tree.io/read-node root-ptr raf)]
+         (when-let [record (find-type key #{:record} root raf)]
+           (:data record))))))
 
 (defn insert-record
   "Inserts a record into the given leaf node and writes changes to file.
@@ -96,43 +99,50 @@
        (b-plus-tree.io/write-node record raf)
        (+ next-free page-size))))
 
+(defn insert
+  "Inserts a key-value pair into the B+ Tree. Returns a map which maps pointer
+  offsets to the nodes located there, for all nodes which are altered."
+  ([key val cache raf
+    {:keys [count free order key-size val-size page-size root] :as header}]))
+
+
 ; problem: I am re-writing the root on disc, but then using the same
 ; in-memory root every time
-(defn insert
-  "Inserts key-value pair into the B+ Tree. Returns the new record if
+(comment
+  (defn insert
+    "Inserts key-value pair into the B+ Tree. Returns the new record if
   successful, or nil if key already exists."
-  ([key val order page-size raf]
-     (let [root (b-plus-tree.io/read-root page-size raf)
-           free (:free root)
-           ; find the leaf to insert into, while building a stack of
-           ; parent pointers
-           [leaf stack]
-           (loop [node  root
-                  free  free
-                  stack []]
-             (let [stack (conj stack node)]
-               (if (b-plus-tree.nodes/leaf? node)
-                 ; found leaf
-                 [node stack]
-                 ; keep searching
-                 (recur (next-node key node raf) free stack))))]
-       (when-not (find-record key leaf raf)
-         ; record doesn't exist already, so we can insert
-         (let [free
-               (if-not (b-plus-tree.nodes/full? leaf order)
-                 (insert-record key val
-                                (assoc leaf
-                                  :free free)
-                                free page-size raf)
-                 ; placeholder
-                 free)
-               new-root (assoc (if (= :root-leaf (:type leaf))
-                                 leaf
-                                 root)
-                          :free free)]
-           (when-not (= :root-leaf (:type leaf))
-             (b-plus-tree.io/write-node (assoc root
-                                          :free free))))))))
+    ([key val order page-size raf]
+       (let [root (b-plus-tree.io/read-root page-size raf)
+             free (:free root)
+             ; find the leaf to insert into, while building a stack of
+             ; parent pointers
+             [leaf stack]
+             (loop [node  root
+                    stack []]
+               (let [stack (conj stack node)]
+                 (if (b-plus-tree.nodes/leaf? node)
+                   ; found leaf
+                   [node stack]
+                   ; keep searching
+                   (recur (next-node key node raf) stack))))]
+         (when-not (find-record key leaf raf)
+           ; record doesn't exist already, so we can insert
+           (let [free
+                 (if-not (b-plus-tree.nodes/full? leaf order)
+                   (insert-record key val
+                                  (assoc leaf
+                                    :free free)
+                                  free page-size raf)
+                   ; placeholder
+                   free)
+                 new-root (assoc (if (= :root-leaf (:type leaf))
+                                   leaf
+                                   root)
+                            :free free)]
+             (when-not (= :root-leaf (:type leaf))
+               (b-plus-tree.io/write-node (assoc root
+                                            :free free)))))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,
@@ -170,17 +180,18 @@
      (take-while (fn [[k v]] (-> k (compare stop) neg?))
                  (traverse leaf start page-size raf))))
 
-(defn find-slice
-  ""
-  ([start page-size raf]
-     (when-let [leaf (find-type start
-                                :leaf
-                                (b-plus-tree.io/read-root page-size raf)
-                                raf)]
-       (traverse start leaf page-size raf)))
-  ([start stop page-size raf]
-     (when-let [leaf (find-type start
-                                :leaf
-                                (b-plus-tree.io/read-root page-size raf)
-                                raf)]
-       (traverse start stop leaf page-size raf))))
+(comment "work in progress"
+         (defn find-slice
+           ""
+           ([start page-size raf]
+              (when-let [leaf (find-type start
+                                         :leaf
+                                         (b-plus-tree.io/read-root page-size raf)
+                                         raf)]
+                (traverse start leaf page-size raf)))
+           ([start stop page-size raf]
+              (when-let [leaf (find-type start
+                                         :leaf
+                                         (b-plus-tree.io/read-root page-size raf)
+                                         raf)]
+                (traverse start stop leaf page-size raf)))))

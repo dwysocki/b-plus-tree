@@ -35,12 +35,20 @@ fields."
                 :ptrs (vals key-ptrs))
          (dissoc :key-ptrs))))
 
+(gloss.core/defcodec header-node
+  (gloss.core/ordered-map
+   :count     :int32
+   :free      raf-offset
+   :order     :int16
+   :key-size  :int32
+   :val-size  :int32
+   :page-size :int32
+   :root      raf-offset))
+
 (def root-leaf-node
   (gloss.core/compile-frame
    (gloss.core/ordered-map
     :type :root-leaf
-    :page-size :int32
-    :free raf-offset
     :keys key-list
     :ptrs child-list)
    node-unmap
@@ -50,8 +58,6 @@ fields."
   (gloss.core/compile-frame
    (gloss.core/ordered-map
     :type :root-nonleaf
-    :page-size :int32
-    :free raf-offset
     :keys key-list
     :ptrs child-list
     :last raf-offset)
