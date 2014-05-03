@@ -1,4 +1,4 @@
-(defproject b-plus-tree "0.1.2"
+(defproject b-plus-tree "0.1.3"
   :description "A B+ Tree implemented in Clojure."
   :url "https://github.com/Rosnec/b-plus-tree"
   :license {:name "MIT License"

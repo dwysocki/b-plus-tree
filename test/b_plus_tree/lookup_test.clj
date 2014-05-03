@@ -95,7 +95,7 @@
                        "d" "http://www.d.com",
                        "e" "http://www.e.com",
                        "f" "http://www.f.com"}]
-          (is (= (b-plus-tree.core/find k raf header) v)))))
+          (is (= (first (b-plus-tree.core/find k raf header)) v)))))
     (io/delete-file "/tmp/RAF" true)))
 
 (deftest find-record-test
