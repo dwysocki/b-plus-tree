@@ -8,19 +8,6 @@
 (def key-size 32)
 (def val-size 32)
 
-(def key-vals
-  [["a" "alink"]
-   ["b" "blink"]
-   ["c" "clink"]
-   ["d" "dlink"]
-   ["ee" "eelink"]
-   ["fff" "ffflink"]
-   ["aabb" "aabblink"]
-   ["zzyy" "zzyylink"]
-   ["foo" "foolink"]
-   ["bar" "barlink"]
-   ["baz" "bazlink"]])
-
 (deftest insert-single-test
   (testing "inserting single element"
     (io/delete-file "/tmp/RAF" true)
@@ -41,33 +28,17 @@
     (b-plus-tree.io/new-tree "/tmp/RAF" order key-size val-size)
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (let [header (b-plus-tree.io/read-header raf)
-            keyvals (apply sorted-map (map str (-> order dec (* 2) range)))
+            keyvals (apply sorted-map (map str (-> order (* 2) range)))
             [header cache]
-            ; inserts all keyvals
-            (loop [keyvals keyvals
-                   header  header
-                   cache   {}]
-              (if-let [entry (first keyvals)]
-                (let [[key val]      entry
-                      _ (println cache)
-                      [header cache] (b-plus-tree.core/insert key val raf
-                                                              header
-                                                              :cache cache)]
-                  (recur (next keyvals) header cache))
-                [header cache]))]
+            (b-plus-tree.core/insert-all keyvals raf header)]
         (b-plus-tree.io/write-cache cache raf)
-        (println cache)
-        (loop [keyvals keyvals
-               header  header
-               cache   cache]
+        (loop [keyvals keyvals]
           (if-let [entry (first keyvals)]
             (let [[key val] entry
                   [cached-data cache] (b-plus-tree.core/find key raf header
-                                                             :cache cache)
-;                  [uncached-data cache] (b-plus-tree.core/find key
-;                  raf header)
-                  ]
-              (is (= val cached-data; uncached-data
-                     ))
-              (recur (next keyvals) header cache))))))
+                                                         :cache cache)
+                  [uncached-data cache] (b-plus-tree.core/find key
+                                                               raf header)]
+              (is (= val cached-data uncached-data))
+              (recur (next keyvals)))))))
     (io/delete-file "/tmp/RAF" true)))

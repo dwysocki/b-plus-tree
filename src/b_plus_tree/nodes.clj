@@ -130,7 +130,9 @@ fields."
   correct position in :keys and :children."
   {:arglists '([key ptr leaf])}
   ([key ptr {:keys [key-ptrs] :as leaf}]
-     (assoc leaf :key-ptrs (assoc key-ptrs key ptr))))
+     (assoc leaf
+       :key-ptrs (assoc key-ptrs key ptr)
+       :altered? true)))
 
 (defn count-children
   "Returns the number of children node has"

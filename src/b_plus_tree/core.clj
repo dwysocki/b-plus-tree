@@ -18,7 +18,7 @@
   "Adds the nodes to the cache."
   ([nodes raf cache]
      (if-let [node (first nodes)]
-       (recur (rest nodes)
+       (recur (next nodes)
               raf
               (assoc cache
                 (:offset node) node))
@@ -60,7 +60,8 @@
          node)
        (recur key (next-node key node raf) raf))))
 
-(defn find-record
+
+(defn find-record2
   "Finds the record in leaf's children which goes to key, or nil if not found."
   ([key leaf raf
     & {:keys [cache]
@@ -70,8 +71,26 @@
             (map (fn get-record [[k ptr]]
                    (when (= k key)
                      (get-node ptr raf cache))))
-            (filter first)
+            (filter identity)
             first)))
+
+(defn find-record
+  "Finds the record in leaf's children which goes to key, or nil if not found."
+  ([key leaf raf
+    & {:keys [cache]
+       :or {cache {}}}] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
+       (let [found
+             (->> leaf
+                  :key-ptrs
+                  (map (fn get-record [[k ptr]]
+                         (when (= k key)
+                           (get-node ptr raf cache))))
+                  (filter identity)
+                  first)]
+         (or found
+             [nil cache]))))
+
+
 
 (defn find-type
   "Returns the next node of the given type while searching the tree for key."
@@ -145,7 +164,7 @@
              [record stack cache]
              (find-type-stack key #{:record} root [] raf
                               :cache cache)]
-         (println "herp" [record stack cache])
+;         (println "herp" [record stack cache])
          [(when record (:data record)), stack, cache])
        [nil, [], cache])))
 
@@ -153,7 +172,7 @@
   "Inserts a record into the given leaf node and writes changes to file.
   Returns the next free space."
   ([key val leaf next-free page-size raf]
-     (println "leaf:" leaf)
+;     (println "leaf:" leaf)
      (let [new-leaf (b-plus-tree.nodes/leaf-assoc key next-free leaf)
            record {:type :record, :data val, :offset next-free}]
        (println "new-leaf" new-leaf)
@@ -179,8 +198,8 @@
        (let [[root record] (b-plus-tree.nodes/new-root key val free page-size)]
          [(assoc header
             :count 1
-            :root  free
-            :free  (+ free (* 2 page-size))),
+            :root  (:offset root)
+            :free  (+ (:offset record) page-size)),
           (cache-nodes [root record]
                        raf
                        cache)])
@@ -188,10 +207,10 @@
              [record stack cache] (find-stack key raf header
                                               :cache cache)
              leaf (last stack)]
-         (println stack)
          (cond
           ; record already exists, do nothing
-          record [header, cache]
+          record ;[header, cache]
+          (throw (ex-info "repeat" {}))
 
           ; leaf is full, split
           (b-plus-tree.nodes/full? leaf order)
@@ -202,7 +221,8 @@
           (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
                 record {:type :record
                         :data val
-                        :offset free}
+                        :offset free
+                        :altered? true}
                 header (assoc header
                          :free (+ free page-size)
                          :count (inc size))]
@@ -210,6 +230,18 @@
                                   raf
                                   cache)]))))))
 
+(defn insert-all
+  "Inserts all key-vals from a map into the tree."
+  ([keyvals raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (if-let [entry (first keyvals)]
+       (let [[key val] entry
+             [header cache] (b-plus-tree.core/insert key val raf
+                                                     header
+                                                     :cache cache)]
+         (recur (next keyvals) raf header {:cache cache}))
+       [header cache])))
 
 ; problem: I am re-writing the root on disc, but then using the same
 ; in-memory root every time
