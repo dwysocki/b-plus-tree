@@ -107,9 +107,10 @@
                                   (is
                                    (=
                                     (b-plus-tree.io/read-node ptr raf)
-                                    (b-plus-tree.core/find-record key
-                                                                  node
-                                                                  raf))))
+                                    (first
+                                     (b-plus-tree.core/find-record key
+                                                                   node
+                                                                   raf)))))
                                 (:key-ptrs node))))
                   leaf-nodes))
       (io/delete-file "/tmp/RAF" true))))

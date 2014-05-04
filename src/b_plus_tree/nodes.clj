@@ -100,13 +100,18 @@ fields."
                       :type)))
 
 (defn new-root
-  "Returns a new leaf root."
-  ([page-size]
-     {:type      :root-leaf,
-      :page-size page-size
-      :free      page-size,
-      :key-ptrs  (sorted-map)
-      :offset    0}))
+  "Returns a vector containing a new leaf root, and a recor"
+  ([key val free page-size]
+     (let [root-ptr   free
+           record-ptr (+ free page-size)]
+       [{:type     :root-leaf
+         :key-ptrs (sorted-map key record-ptr)
+         :offset   root-ptr
+         :altered? true},
+        {:type     :record
+         :data     val
+         :offset   record-ptr
+         :altered? true}])))
 
 (def leaf-types
   #{:root-leaf :leaf})

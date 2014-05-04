@@ -4,21 +4,31 @@
             [b-plus-tree io nodes util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
-(defn get-node
-  "Reads the node from disc only if it is not already in the cache"
-  ([ptr raf cache]
-     (or (cache ptr)
-         (b-plus-tree.io/read-node ptr raf))))
-
 (defn cache-node
   "Adds the node to the cache.
 
   Future plan:
     When cache exceeds some capacity, write entire cache to disc before
     proceeding, and clear cache."
-  ([node cache]
+  ([node raf cache]
      (assoc cache
        (:offset node) node)))
+
+(defn cache-nodes
+  "Adds the nodes to the cache."
+  ([nodes cache]
+     (if-let [node (first nodes)]
+       (recur (rest nodes) (assoc cache
+                             (:offset node) node))
+       cache)))
+
+(defn get-node
+  "Reads the node from disc only if it is not already in the cache"
+  ([ptr raf cache]
+     (if-let [node (cache ptr)]
+       [node cache]
+       (let [node (b-plus-tree.io/read-node ptr raf)]
+         [node (cache-node node raf cache)]))))
 
 (defn next-ptr
   "Returns the next pointer when searching the tree for key in node."
@@ -34,8 +44,9 @@
   ([key node raf
     & {:keys [cache]
        :or {cache {}}}]
-     (when-let [next-ptr (next-ptr key node)]
-       (get-node next-ptr raf cache))))
+     (if-let [next-ptr (next-ptr key node)]
+       (get-node next-ptr raf cache)
+       [nil cache])))
 
 (defn find-leaf
   "Recursively finds the leaf node associated with key by traversing node's
@@ -52,16 +63,13 @@
   ([key leaf raf
     & {:keys [cache]
        :or {cache {}}}] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
-       (let [record
-             (->> leaf
-                  :key-ptrs
-                  (map (fn get-record [[k ptr]]
-                         (when (= k key)
-                           (get-node ptr raf cache)
-                           (b-plus-tree.io/read-node ptr raf))))
-                  (filter identity)
-                  first)]
-         record)))
+       (->> leaf
+            :key-ptrs
+            (map (fn get-record [[k ptr]]
+                   (when (= k key)
+                     (get-node ptr raf cache))))
+            (filter first)
+            first)))
 
 (defn find-type
   "Returns the next node of the given type while searching the tree for key."
@@ -70,20 +78,19 @@
        :or {cache {}}}]
      (cond
       (b-plus-tree.nodes/leaf? node)
-      (when (b-plus-tree.util/in? types :record)
-        (if-let [record (find-record key node raf
-                                     :cache cache)]
-          [record (cache-node record cache)]
-          [nil cache]))
+      (if (b-plus-tree.util/in? types :record)
+        (find-record key node raf
+                     :cache cache)
+        [nil cache])
       
       (= :record (:type node)) [nil cache]
       
       :default
-      (when-let [nxt (next-node key node raf :cache cache)]
+      (if-let [[nxt cache] (next-node key node raf :cache cache)]
         (if (b-plus-tree.util/in? types (:type nxt))
-          [nxt (cache-node nxt cache)]
+          [nxt cache]
           (recur key types nxt raf
-                 {:cache (cache-node nxt cache)}))))))
+                 {:cache cache}))))))
 
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
@@ -91,13 +98,14 @@
   ([key raf {cnt :count, size :key-size, root-ptr :root :as header} &
     {:keys [cache]
      :or {cache {}}}]
-     (when-not (or (zero? cnt)
+     (if-not (or (zero? cnt)
                    (> (count key) size))
        (let [root (or (cache root-ptr)
                       (b-plus-tree.io/read-node root-ptr raf))]
          (let [[record cache] (find-type key #{:record} root raf
-                                         :cache (cache-node root cache))]
-           [(when record (:data record)) cache])))))
+                                         :cache (cache-node root raf cache))]
+           [(when record (:data record)) cache]))
+       [nil cache])))
 
 (defn insert-record
   "Inserts a record into the given leaf node and writes changes to file.
@@ -112,13 +120,32 @@
        (+ next-free page-size))))
 
 (defn insert
-  "Inserts a key-value pair into the B+ Tree. Returns a map which maps pointer
-  offsets to the nodes located there, for all nodes which are altered."
+  "Inserts a key-value pair into the B+ Tree. Returns a vector whose first
+  element is the new header, and whose second element is a cache map, which
+  maps pointer offsets to the nodes located there, for all nodes which have
+  been read.
+  If a node is altered, it is given an additional [:altered? true] entry."
   ([key val raf
-    {:keys [count free order key-size val-size page-size root]
+    {size :count, root-ptr :root
+     :keys [free order key-size val-size page-size]
      :as header}
     & {:keys [cache]
-       :or {cache {}}}]))
+       :or {cache {}}}]
+     {:pre [(>= key-size (count key))
+            (>= val-size (count val))]}
+     (if (zero? size)
+       [(assoc header
+          :count    1
+          :root-ptr free
+          :free     (+ free (* 2 page-size))),
+        (cache-nodes (b-plus-tree.nodes/new-root key val free page-size)
+                     raf
+                     cache)
+        (let [root  (get-node root-ptr raf cache)
+              cache ()])]
+       )
+     
+     ))
 
 
 ; problem: I am re-writing the root on disc, but then using the same
