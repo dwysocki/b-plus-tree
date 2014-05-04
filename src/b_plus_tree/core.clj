@@ -16,10 +16,12 @@
 
 (defn cache-nodes
   "Adds the nodes to the cache."
-  ([nodes cache]
+  ([nodes raf cache]
      (if-let [node (first nodes)]
-       (recur (rest nodes) (assoc cache
-                             (:offset node) node))
+       (recur (rest nodes)
+              raf
+              (assoc cache
+                (:offset node) node))
        cache)))
 
 (defn get-node
@@ -92,6 +94,31 @@
           (recur key types nxt raf
                  {:cache cache}))))))
 
+(defn find-type-stack
+  "Returns the next node of the given type while searching the tree for key.
+  Builds a stack of visited nodes during the process."
+  ([key types node stack raf
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [stack (conj stack node)]
+       (cond
+        (b-plus-tree.nodes/leaf? node)
+        (if (b-plus-tree.util/in? types :record)
+          (let [[data cache]
+                (find-record key node raf
+                             :cache cache)]
+            [data stack cache])
+          [nil stack cache])
+
+        (= :record (:type node)) [nil stack cache]
+
+        :default
+        (if-let [[nxt cache] (next-node key node raf :cache cache)]
+          (if (b-plus-tree.util/in? types (:type nxt))
+            [nxt stack cache]
+            (recur key types nxt stack raf
+                   {:cache cache})))))))
+
 (defn find
   "Returns the value associated with key by traversing the entire tree, or
   nil if not found."
@@ -100,12 +127,27 @@
      :or {cache {}}}]
      (if-not (or (zero? cnt)
                    (> (count key) size))
-       (let [root (or (cache root-ptr)
-                      (b-plus-tree.io/read-node root-ptr raf))]
-         (let [[record cache] (find-type key #{:record} root raf
-                                         :cache (cache-node root raf cache))]
-           [(when record (:data record)) cache]))
-       [nil cache])))
+       (let [[root cache] (get-node root-ptr raf cache)
+             [record cache] (find-type key #{:record} root raf
+                                       :cache cache)]
+         [(when record (:data record)), cache])
+       [nil, cache])))
+
+(defn find-stack
+  "Returns the value associated with key by traversing the entire tree, or
+  nil if not found, building a stack of visited nodes during the process."
+  ([key raf {cnt :count, size :key-size, root-ptr :root :as header} &
+    {:keys [cache]
+     :or {cache {}}}]
+     (if-not (or (zero? cnt)
+                   (> (count key) size))
+       (let [[root cache] (get-node root-ptr raf cache)
+             [record stack cache]
+             (find-type-stack key #{:record} root [] raf
+                              :cache cache)]
+         (println "herp" [record stack cache])
+         [(when record (:data record)), stack, cache])
+       [nil, [], cache])))
 
 (defn insert-record
   "Inserts a record into the given leaf node and writes changes to file.
@@ -134,18 +176,39 @@
      {:pre [(>= key-size (count key))
             (>= val-size (count val))]}
      (if (zero? size)
-       [(assoc header
-          :count    1
-          :root-ptr free
-          :free     (+ free (* 2 page-size))),
-        (cache-nodes (b-plus-tree.nodes/new-root key val free page-size)
-                     raf
-                     cache)
-        (let [root  (get-node root-ptr raf cache)
-              cache ()])]
-       )
-     
-     ))
+       (let [[root record] (b-plus-tree.nodes/new-root key val free page-size)]
+         [(assoc header
+            :count 1
+            :root  free
+            :free  (+ free (* 2 page-size))),
+          (cache-nodes [root record]
+                       raf
+                       cache)])
+       (let [[root cache] (get-node root-ptr raf cache)
+             [record stack cache] (find-stack key raf header
+                                              :cache cache)
+             leaf (last stack)]
+         (println stack)
+         (cond
+          ; record already exists, do nothing
+          record [header, cache]
+
+          ; leaf is full, split
+          (b-plus-tree.nodes/full? leaf order)
+          (throw (new UnsupportedOperationException))
+
+          ; leaf is not full, simple insert
+          :default
+          (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
+                record {:type :record
+                        :data val
+                        :offset free}
+                header (assoc header
+                         :free (+ free page-size)
+                         :count (inc size))]
+            [header, (cache-nodes [leaf record]
+                                  raf
+                                  cache)]))))))
 
 
 ; problem: I am re-writing the root on disc, but then using the same

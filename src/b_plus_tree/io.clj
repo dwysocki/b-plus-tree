@@ -120,3 +120,12 @@
          (.writeShort size)
          (.write (.array (gloss.io/contiguous encoded-node))))
        (.getFilePointer raf))))
+
+(defn write-cache
+  "Writes all nodes in the cache map which have been altered"
+  ([cache raf]
+     (->> cache
+          vals
+          (filter :altered?)
+          (map #(write-node % raf))
+          doall)))
