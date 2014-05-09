@@ -135,7 +135,5 @@
 (defn write-cache
   ([cache raf]
      (let [nodes (vals cache)
-           _ (println "nodes:" nodes)
-           altered-nodes (filter :altered? nodes)
-           _ (println "altered:" altered-nodes)]
+           altered-nodes (filter :altered? nodes)]
        (doall (map #(write-node % raf) altered-nodes)))))

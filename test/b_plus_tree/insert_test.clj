@@ -28,17 +28,24 @@
     (b-plus-tree.io/new-tree "/tmp/RAF" order key-size val-size)
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (let [header (b-plus-tree.io/read-header raf)
-            keyvals (apply sorted-map (map str (-> order (* 2) range)))
+            keyvals1 (apply sorted-map (map str (-> order (* 2) range)))
+            keyvals2 (reduce (fn [m [k v]] (assoc m k (str v 2)))
+                             (sorted-map)
+                             keyvals1)
             [header cache]
-            (b-plus-tree.core/insert-all keyvals raf header)]
+            (b-plus-tree.core/insert-all keyvals1 raf header)]
+        ; confirming that all entries can be found in the cache
+        (is (b-plus-tree.core/map-equals keyvals1 raf header
+                                         :cache cache))
+        ; writing cache to disc
         (b-plus-tree.io/write-cache cache raf)
-        (loop [keyvals keyvals]
-          (if-let [entry (first keyvals)]
-            (let [[key val] entry
-                  [cached-data cache] (b-plus-tree.core/find key raf header
-                                                         :cache cache)
-                  [uncached-data cache] (b-plus-tree.core/find key
-                                                               raf header)]
-              (is (= val cached-data uncached-data))
-              (recur (next keyvals)))))))
+        ; confirming that all entries can be found on disc
+        (is (b-plus-tree.core/map-equals keyvals1 raf header))
+        ; overwriting all entries, and running the same checks
+        (let [[header cache]
+              (b-plus-tree.core/insert-all keyvals2 raf header)]
+          (is (b-plus-tree.core/map-equals keyvals2 raf header
+                                           :cache cache))
+          (b-plus-tree.io/write-cache cache raf)
+          (is (b-plus-tree.core/map-equals keyvals2 raf header)))))
     (io/delete-file "/tmp/RAF" true)))

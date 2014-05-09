@@ -153,7 +153,7 @@
        [nil, cache])))
 
 (defn find-stack
-  "Returns the value associated with key by traversing the entire tree, or
+  "Returns the record associated with key by traversing the entire tree, or
   nil if not found, building a stack of visited nodes during the process."
   ([key raf {cnt :count, size :key-size, root-ptr :root :as header} &
     {:keys [cache]
@@ -165,7 +165,7 @@
              (find-type-stack key #{:record} root [] raf
                               :cache cache)]
 ;         (println "herp" [record stack cache])
-         [(when record (:data record)), stack, cache])
+         [record, stack, cache])
        [nil, [], cache])))
 
 (defn insert-record
@@ -208,9 +208,13 @@
                                               :cache cache)
              leaf (last stack)]
          (cond
-          ; record already exists, do nothing
-          record ;[header, cache]
-          (throw (ex-info "repeat" {}))
+          ; record already exists, overwrite
+          record
+          [header, (cache-node (assoc record
+                                 :data val
+                                 :altered? true)
+                               raf
+                               cache)]
 
           ; leaf is full, split
           (b-plus-tree.nodes/full? leaf order)
@@ -242,6 +246,25 @@
                                                      :cache cache)]
          (recur (next keyvals) raf header {:cache cache}))
        [header cache])))
+
+(defn map-subset
+  "Returns true if m is a subset of the B+ Tree"
+  ([m raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (every? identity (map (fn [[k v]] (= v (first (find k raf header
+                                                        :cache cache))))
+                           m))))
+
+(defn map-equals
+  ([m raf
+    {size :count
+     :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (when (= size (count m))
+       (map-subset m raf header
+                   :cache cache))))
 
 ; problem: I am re-writing the root on disc, but then using the same
 ; in-memory root every time
