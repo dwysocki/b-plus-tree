@@ -4,7 +4,7 @@
             [b-plus-tree core io])
   (:use clojure.test))
 
-(def order 32)
+(def order    32)
 (def key-size 32)
 (def val-size 32)
 
