@@ -9,10 +9,10 @@
      (let [mid (-> coll count (quot 2))]
        (split-at mid coll))))
 
-(defn split-half-into
+(defmacro split-half-into
   "Splits from-coll in half, putting the results of each into to-coll"
   ([to from]
-     (map (partial into to) (split-half from))))
+     `(map (partial into ~to) (split-half ~from))))
 
 (defn split-center
   "Splits coll into 3 parts, with the center element being its own part.

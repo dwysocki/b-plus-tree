@@ -183,7 +183,7 @@
        [header, cache])))
 
 (defn split-root-nonleaf
-  "Splits a :root-leaf node. Do not attempt to split another type of node."
+  "Splits a :root-nonleaf node. Do not attempt to split another type of node."
   ([{:keys [key-ptrs last offset]
      :as root-nonleaf}
     raf
@@ -219,6 +219,52 @@
                                    raf
                                    cache)]
        [header, cache])))
+
+(defn split-internal
+  "Splits an :internal node. Do not attempt to split another type of node.
+  Returns [[k p] header cache], where k is the key to add to the parent,
+  and p is the pointer of the new (right) node."
+  ([{:keys [key-ptrs last offset]
+     :as leaf}
+    raf
+    {:keys [free page-size] :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     ))
+
+(defn split-leaf
+  "Splits a :leaf node. Do not attempt to split another type of node.
+  Returns [[k p] header cache], where k is the key to add to the parent,
+  and p is the pointer of the new (right) node."
+  ([{:keys [key-ptrs next prev offset]
+     :as leaf}
+    raf
+    {:keys [free page-size] :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[left right] (b-plus-tree.seq/split-half-into (sorted-map)
+                                                         key-ptrs),
+           [right-offset free] (b-plus-tree.seq/n-range free 2 page-size),
+
+           left-node  {:type     :leaf
+                       :key-ptrs left
+                       :prev     prev
+                       :next     right-offset
+                       :offset   offset
+                       :altered? true},
+           right-node {:type     :leaf
+                       :key-ptrs right
+                       :prev     offset
+                       :next     next
+                       :offset   right-offset
+                       :altered? true},
+           raised-key (-> right first first),
+           header     (assoc header
+                        :free free)
+           cache      (cache-nodes [left-node right-node]
+                                   raf
+                                   cache)]
+       [[raised-key right-offset], header, cache])))
 
 (defn insert
   "Inserts a key-value pair into the B+ Tree. Returns a vector whose first
