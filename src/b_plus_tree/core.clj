@@ -144,7 +144,7 @@
          [record, stack, cache])
        [nil, [], cache])))
 
-(defn split-root-leaf
+(defn- split-root-leaf
   "Splits a :root-leaf node. Do not attempt to split another type of node."
   ([{:keys [key-ptrs offset]
      :as root-leaf}
@@ -182,7 +182,7 @@
                               cache)]
        [header, cache])))
 
-(defn split-root-nonleaf
+(defn- split-root-nonleaf
   "Splits a :root-nonleaf node. Do not attempt to split another type of node."
   ([{:keys [key-ptrs last offset]
      :as root-nonleaf}
@@ -193,7 +193,7 @@
      (let [[left-kps [mid-k mid-p] right-kps]
            (b-plus-tree.seq/split-center key-ptrs),
            
-           [left right] (map (partial into (sorted-map)) [left-kps right-kps])
+           [left right] (map (partial into (sorted-map)) [left-kps right-kps]),
            
            [left-offset right-offset free]
            (b-plus-tree.seq/n-range free 3 page-size),
@@ -220,9 +220,9 @@
                                    cache)]
        [header, cache])))
 
-(defn split-internal
+(defn- split-internal
   "Splits an :internal node. Do not attempt to split another type of node.
-  Returns [[k p] header cache], where k is the key to add to the parent,
+  Returns [[k p] header cache], where k is the key to push to the parent,
   and p is the pointer of the new (right) node."
   ([{:keys [key-ptrs last offset]
      :as leaf}
@@ -230,9 +230,32 @@
     {:keys [free page-size] :as header}
     & {:keys [cache]
        :or {cache {}}}]
-     ))
+     (let [[left-kps [mid-k mid-p] right-kps]
+           (b-plus-tree.seq/split-center key-ptrs),
 
-(defn split-leaf
+           [left right] (map (partial into (sorted-map)) [left-kps right-kps]),
+
+           [right-offset free]
+           (b-plus-tree.seq/n-range free 2 page-size),
+
+           left-node  {:type     :internal
+                       :key-ptrs left
+                       :last     mid-p
+                       :offset   offset
+                       :altered? true},
+           right-node {:type     :internal
+                       :key-ptrs right
+                       :last     last
+                       :offset   right-offset
+                       :altered? true},
+           header     (assoc header
+                        :free free)
+           cache      (cache-nodes [left-node right-node]
+                                   raf
+                                   cache)]
+       [[mid-k right-offset], header, cache])))
+
+(defn- split-leaf
   "Splits a :leaf node. Do not attempt to split another type of node.
   Returns [[k p] header cache], where k is the key to add to the parent,
   and p is the pointer of the new (right) node."
