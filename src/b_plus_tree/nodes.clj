@@ -80,6 +80,7 @@ fields."
     :type :leaf
     :keys key-list
     :ptrs child-list
+    :prev raf-offset
     :next raf-offset)
    node-unmap
    node-map))

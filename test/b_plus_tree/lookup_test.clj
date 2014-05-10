@@ -23,7 +23,7 @@
   [{:type :internal
     :key-ptrs (sorted-map "b" 400)
     :last 500
-    :offset 200}
+    :offset 200},
    {:type :internal
     :key-ptrs (sorted-map "d" 600,
                           "e" 700)
@@ -33,42 +33,47 @@
 (def leaf-nodes
   [{:type :leaf
     :key-ptrs (sorted-map "a" 900)
+    :prev -1
     :next 500
-    :offset 400}
+    :offset 400},
    {:type :leaf
     :key-ptrs (sorted-map "b" 1000)
+    :prev 400
     :next 600
-    :offset 500}
+    :offset 500},
    {:type :leaf
     :key-ptrs (sorted-map "c" 1100)
+    :prev 500
     :next 700
-    :offset 600}
+    :offset 600},
    {:type :leaf
     :key-ptrs (sorted-map "d" 1200)
+    :prev 600
     :next 800
-    :offset 700}
+    :offset 700},
    {:type :leaf
     :key-ptrs (sorted-map "e" 1300,
                           "f" 1400)
+    :prev 700
     :next -1
     :offset 800}])
 
 (def record-nodes
   [{:type :record
     :data "http://www.a.com"
-    :offset 900}
+    :offset 900},
    {:type :record
     :data "http://www.b.com"
-    :offset 1000}
+    :offset 1000},
    {:type :record
     :data "http://www.c.com"
-    :offset 1100}
+    :offset 1100},
    {:type :record
     :data "http://www.d.com"
-    :offset 1200}
+    :offset 1200},
    {:type :record
     :data "http://www.e.com"
-    :offset 1300}
+    :offset 1300},
    {:type :record
     :data "http://www.f.com"
     :offset 1400}])

@@ -20,6 +20,7 @@
                   :offset 8000}
                  {:type :leaf,
                   :key-ptrs (sorted-map "x" 10, "y" 15),
+                  :prev -1,
                   :next -1,
                   :offset 12000}
                  {:type :record,

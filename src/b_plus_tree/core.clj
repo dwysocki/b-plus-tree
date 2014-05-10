@@ -247,8 +247,8 @@
          (recur (next keyvals) raf header {:cache cache}))
        [header cache])))
 
-(defn map-subset
-  "Returns true if m is a subset of the B+ Tree"
+(defn map-subset?
+  "Returns true if the map m is a subset of the B+ Tree, else nil."
   ([m raf header
     & {:keys [cache]
        :or {cache {}}}]
@@ -256,53 +256,16 @@
                                                         :cache cache))))
                            m))))
 
-(defn map-equals
+(defn map-equals?
+  "Returns true if the map m is equal to the B+ Tree, else nil."
   ([m raf
     {size :count
      :as header}
     & {:keys [cache]
        :or {cache {}}}]
      (when (= size (count m))
-       (map-subset m raf header
+       (map-subset? m raf header
                    :cache cache))))
-
-; problem: I am re-writing the root on disc, but then using the same
-; in-memory root every time
-(comment
-  (defn insert
-    "Inserts key-value pair into the B+ Tree. Returns the new record if
-  successful, or nil if key already exists."
-    ([key val order page-size raf]
-       (let [root (b-plus-tree.io/read-root page-size raf)
-             free (:free root)
-             ; find the leaf to insert into, while building a stack of
-             ; parent pointers
-             [leaf stack]
-             (loop [node  root
-                    stack []]
-               (let [stack (conj stack node)]
-                 (if (b-plus-tree.nodes/leaf? node)
-                   ; found leaf
-                   [node stack]
-                   ; keep searching
-                   (recur (next-node key node raf) stack))))]
-         (when-not (find-record key leaf raf)
-           ; record doesn't exist already, so we can insert
-           (let [free
-                 (if-not (b-plus-tree.nodes/full? leaf order)
-                   (insert-record key val
-                                  (assoc leaf
-                                    :free free)
-                                  free page-size raf)
-                   ; placeholder
-                   free)
-                 new-root (assoc (if (= :root-leaf (:type leaf))
-                                   leaf
-                                   root)
-                            :free free)]
-             (when-not (= :root-leaf (:type leaf))
-               (b-plus-tree.io/write-node (assoc root
-                                            :free free)))))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

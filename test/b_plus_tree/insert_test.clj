@@ -35,17 +35,17 @@
             [header cache]
             (b-plus-tree.core/insert-all keyvals1 raf header)]
         ; confirming that all entries can be found in the cache
-        (is (b-plus-tree.core/map-equals keyvals1 raf header
+        (is (b-plus-tree.core/map-equals? keyvals1 raf header
                                          :cache cache))
         ; writing cache to disc
         (b-plus-tree.io/write-cache cache raf)
         ; confirming that all entries can be found on disc
-        (is (b-plus-tree.core/map-equals keyvals1 raf header))
+        (is (b-plus-tree.core/map-equals? keyvals1 raf header))
         ; overwriting all entries, and running the same checks
         (let [[header cache]
               (b-plus-tree.core/insert-all keyvals2 raf header)]
-          (is (b-plus-tree.core/map-equals keyvals2 raf header
+          (is (b-plus-tree.core/map-equals? keyvals2 raf header
                                            :cache cache))
           (b-plus-tree.io/write-cache cache raf)
-          (is (b-plus-tree.core/map-equals keyvals2 raf header)))))
+          (is (b-plus-tree.core/map-equals? keyvals2 raf header)))))
     (io/delete-file "/tmp/RAF" true)))
