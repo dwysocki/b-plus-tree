@@ -47,7 +47,7 @@
       (is (= new-root (cache root-offset))))))
 
 (deftest split-root-nonleaf-test
-  (testing "splitting root-leaf node"
+  (testing "splitting root-nonleaf node"
     (let [header {:free      (* 7 page-size)
                   :page-size page-size}
           root-offset page-size
@@ -82,3 +82,77 @@
       (is (= left-node (cache left-offset)))
       (is (= right-node (cache right-offset)))
       (is (= new-root (cache root-offset))))))
+
+(deftest split-leaf-test-even
+  (testing "splitting even leaf node"
+    (let [header {:free      (* 6 page-size)
+                  :page-size page-size},
+          orig-offset page-size,
+          right-offset (* 6 page-size),
+          orig-leaf {:type :leaf
+                     :key-ptrs (sorted-map "A" (* 2 page-size)
+                                           "B" (* 3 page-size)
+                                           "C" (* 4 page-size)
+                                           "D" (* 5 page-size))
+                     :prev 1000
+                     :next 2000
+                     :offset orig-offset},
+          left-node {:type :leaf
+                     :key-ptrs (sorted-map "A" (* 2 page-size)
+                                           "B" (* 3 page-size))
+                     :prev 1000
+                     :next right-offset
+                     :offset orig-offset
+                     :altered? true},
+          right-node {:type :leaf
+                      :key-ptrs (sorted-map "C" (* 4 page-size)
+                                            "D" (* 5 page-size))
+                      :prev orig-offset
+                      :next 2000
+                      :offset right-offset
+                      :altered? true},
+
+          [[raised-key raised-offset] header cache]
+          (b-plus-tree.core/split-leaf orig-leaf nil header)]
+      (is (= raised-key "C"))
+      (is (= raised-offset right-offset))
+      (is (= left-node (cache orig-offset)))
+      (is (= right-node (cache right-offset))))))
+
+(deftest split-leaf-test-odd
+  (testing "splitting odd leaf node"
+    (let [header {:free      (* 7 page-size)
+                  :page-size page-size},
+          orig-offset page-size,
+          right-offset (* 7 page-size),
+          orig-leaf {:type :leaf
+                     :key-ptrs (sorted-map "A" (* 2 page-size)
+                                           "B" (* 3 page-size)
+                                           "C" (* 4 page-size)
+                                           "D" (* 5 page-size)
+                                           "E" (* 6 page-size))
+                     :prev 1000
+                     :next 2000
+                     :offset orig-offset},
+          left-node {:type :leaf
+                     :key-ptrs (sorted-map "A" (* 2 page-size)
+                                           "B" (* 3 page-size))
+                     :prev 1000
+                     :next right-offset
+                     :offset orig-offset
+                     :altered? true},
+          right-node {:type :leaf
+                      :key-ptrs (sorted-map "C" (* 4 page-size)
+                                            "D" (* 5 page-size)
+                                            "E" (* 6 page-size))
+                      :prev orig-offset
+                      :next 2000
+                      :offset right-offset
+                      :altered? true},
+
+          [[raised-key raised-offset] header cache]
+          (b-plus-tree.core/split-leaf orig-leaf nil header)]
+      (is (= raised-key "C"))
+      (is (= raised-offset right-offset))
+      (is (= left-node (cache orig-offset)))
+      (is (= right-node (cache right-offset))))))
