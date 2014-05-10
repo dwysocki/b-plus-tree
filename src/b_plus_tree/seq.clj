@@ -28,3 +28,13 @@
      (let [mid (-> coll count dec (quot 2))
            [front back] (split-at mid coll)]
        [front (first back) (next back)])))
+
+(defmacro n-range
+  "Returns a lazy sequence of n numbers from start (inclusive), by step,
+  where start defaults to 0, step to 1, and n to infinity. When step is equal
+  to 0, returns an infinite sequence of start. When start is equal to end,
+  returns empty list."
+  ([] `(range))
+  ([n] `(step-range 0 ~n 1))
+  ([start n] `(step-range ~start ~n 1))
+  ([start n step] `(range ~start (+ ~start (* ~n ~step)) ~step)))

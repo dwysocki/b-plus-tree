@@ -1,10 +1,10 @@
 (ns b-plus-tree.core
   "Primary functions for interacting with the B+ Tree."
   (:require [clojure.set :as set]
-            [b-plus-tree io nodes util]
+            [b-plus-tree io nodes seq util]
             [b-plus-tree.util :refer [dbg verbose]]))
 
-(defn cache-node
+(defn- cache-node
   "Adds the node to the cache.
 
   Future plan:
@@ -14,7 +14,7 @@
      (assoc cache
        (:offset node) node)))
 
-(defn cache-nodes
+(defn- cache-nodes
   "Adds the nodes to the cache."
   ([nodes raf cache]
      (if-let [node (first nodes)]
@@ -24,7 +24,7 @@
                 (:offset node) node))
        cache)))
 
-(defn get-node
+(defn- get-node
   "Reads the node from disc only if it is not already in the cache"
   ([ptr raf cache]
      (if-let [node (cache ptr)]
@@ -32,7 +32,7 @@
        (let [node (b-plus-tree.io/read-node ptr raf)]
          [node (cache-node node raf cache)]))))
 
-(defn next-ptr
+(defn- next-ptr
   "Returns the next pointer when searching the tree for key in node."
   ([key node]
      (let [[k ptr] (->> node
@@ -41,7 +41,7 @@
                         first)]
        (or ptr (:last node)))))
 
-(defn next-node
+(defn- next-node
   "Returns the next node when searching the tree for key in node."
   ([key node raf
     & {:keys [cache]
@@ -50,31 +50,7 @@
        (get-node next-ptr raf cache)
        [nil cache])))
 
-(defn find-leaf
-  "Recursively finds the leaf node associated with key by traversing node's
-  subtree. If the given node is itself a leaf node, returns the node if it
-  contains key, else returns nil."
-  ([key node raf]
-     (if (contains? b-plus-tree.nodes/leaf-types (:type node))
-       (when (b-plus-tree.util/in? (:keys node) key)
-         node)
-       (recur key (next-node key node raf) raf))))
-
-
-(defn find-record2
-  "Finds the record in leaf's children which goes to key, or nil if not found."
-  ([key leaf raf
-    & {:keys [cache]
-       :or {cache {}}}] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
-       (->> leaf
-            :key-ptrs
-            (map (fn get-record [[k ptr]]
-                   (when (= k key)
-                     (get-node ptr raf cache))))
-            (filter identity)
-            first)))
-
-(defn find-record
+(defn- find-record
   "Finds the record in leaf's children which goes to key, or nil if not found."
   ([key leaf raf
     & {:keys [cache]
@@ -92,7 +68,7 @@
 
 
 
-(defn find-type
+(defn- find-type
   "Returns the next node of the given type while searching the tree for key."
   ([key types node raf
     & {:keys [cache]
@@ -113,7 +89,7 @@
           (recur key types nxt raf
                  {:cache cache}))))))
 
-(defn find-type-stack
+(defn- find-type-stack
   "Returns the next node of the given type while searching the tree for key.
   Builds a stack of visited nodes during the process."
   ([key types node stack raf
@@ -152,7 +128,7 @@
          [(when record (:data record)), cache])
        [nil, cache])))
 
-(defn find-stack
+(defn- find-stack
   "Returns the record associated with key by traversing the entire tree, or
   nil if not found, building a stack of visited nodes during the process."
   ([key raf {cnt :count, size :key-size, root-ptr :root :as header} &
@@ -168,17 +144,81 @@
          [record, stack, cache])
        [nil, [], cache])))
 
-(defn insert-record
-  "Inserts a record into the given leaf node and writes changes to file.
-  Returns the next free space."
-  ([key val leaf next-free page-size raf]
-;     (println "leaf:" leaf)
-     (let [new-leaf (b-plus-tree.nodes/leaf-assoc key next-free leaf)
-           record {:type :record, :data val, :offset next-free}]
-       (println "new-leaf" new-leaf)
-       (b-plus-tree.io/write-node new-leaf raf)
-       (b-plus-tree.io/write-node record raf)
-       (+ next-free page-size))))
+(defn split-root-leaf
+  "Splits a :root-leaf node. Do not attempt to split another type of node."
+  ([{:keys [key-ptrs offset]
+     :as root-leaf}
+    raf
+    {:keys [free page-size] :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[left right] (b-plus-tree.seq/split-half-into (sorted-map)
+                                                         key-ptrs),
+           [left-offset right-offset free]
+           (b-plus-tree.seq/n-range free 3 page-size),
+           
+           left-node {:type :leaf
+                      :key-ptrs left
+                      :prev -1
+                      :next right-offset
+                      :offset left-offset
+                      :altered? true},
+           right-node {:type :leaf
+                       :key-ptrs right
+                       :prev left-offset
+                       :next -1
+                       :offset right-offset
+                       :altered? true},
+           root-node {:type :root-nonleaf
+                      :key-ptrs (sorted-map (-> right first first)
+                                            left-offset)
+                      :last right-offset
+                      :offset offset
+                      :altered? true},
+           header (assoc header
+                    :free free),
+           cache (cache-nodes [left-node right-node root-node]
+                              raf
+                              cache)]
+       [header, cache])))
+
+(defn split-root-nonleaf
+  "Splits a :root-leaf node. Do not attempt to split another type of node."
+  ([{:keys [key-ptrs last offset]
+     :as root-nonleaf}
+    raf
+    {:keys [free page-size] :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[left-kps [mid-k mid-p] right-kps]
+           (b-plus-tree.seq/split-center key-ptrs),
+           
+           [left right] (map (partial into (sorted-map)) [left-kps right-kps])
+           
+           [left-offset right-offset free]
+           (b-plus-tree.seq/n-range free 3 page-size),
+
+           left-node  {:type     :internal
+                       :key-ptrs left
+                       :last     mid-p
+                       :offset   left-offset
+                       :altered? true},
+           right-node {:type     :internal
+                       :key-ptrs right
+                       :last     last
+                       :offset   right-offset
+                       :altered? true},
+           root-node  {:type     :root-nonleaf
+                       :key-ptrs (sorted-map mid-k left-offset)
+                       :last     right-offset
+                       :offset   offset
+                       :altered? true},
+           header     (assoc header
+                        :free free),
+           cache      (cache-nodes [left-node right-node root-node]
+                                   raf
+                                   cache)]
+       [header, cache])))
 
 (defn insert
   "Inserts a key-value pair into the B+ Tree. Returns a vector whose first
