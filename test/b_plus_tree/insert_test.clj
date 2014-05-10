@@ -28,7 +28,7 @@
     (b-plus-tree.io/new-tree "/tmp/RAF" order key-size val-size)
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (let [header (b-plus-tree.io/read-header raf)
-            keyvals1 (apply sorted-map (map str (-> order (* 2) range)))
+            keyvals1 (apply sorted-map (map str (-> order dec (* 2) range)))
             keyvals2 (reduce (fn [m [k v]] (assoc m k (str v 2)))
                              (sorted-map)
                              keyvals1)

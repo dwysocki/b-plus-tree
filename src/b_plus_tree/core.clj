@@ -289,6 +289,10 @@
                                    cache)]
        [[raised-key right-offset], header, cache])))
 
+(defn- insert-split
+  ([])
+  )
+
 (defn insert
   "Inserts a key-value pair into the B+ Tree. Returns a vector whose first
   element is the new header, and whose second element is a cache map, which
@@ -316,21 +320,12 @@
              [record stack cache] (find-stack key raf header
                                               :cache cache)
              leaf (last stack)]
-         (cond
-          ; record already exists, overwrite
-          record
-          [header, (cache-node (assoc record
-                                 :data val
-                                 :altered? true)
-                               raf
-                               cache)]
-
-          ; leaf is full, split
-          (b-plus-tree.nodes/full? leaf order)
-          (throw (new UnsupportedOperationException))
-
-          ; leaf is not full, simple insert
-          :default
+         (if record ; record already exists, overwrite
+           [header, (cache-node (assoc record
+                                  :data val
+                                  :altered? true)
+                                raf
+                                cache)]
           (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
                 record {:type :record
                         :data val
@@ -339,9 +334,13 @@
                 header (assoc header
                          :free (+ free page-size)
                          :count (inc size))]
-            [header, (cache-nodes [leaf record]
-                                  raf
-                                  cache)]))))))
+            (if (b-plus-tree.nodes/full? leaf order)
+              ; leaf is full, split
+              (throw (new UnsupportedOperationException))
+              ; leaf has room, return
+              [header, (cache-nodes [leaf record]
+                                    raf
+                                    cache)])))))))
 
 (defn insert-all
   "Inserts all key-vals from a map into the tree."

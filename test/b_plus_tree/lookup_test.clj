@@ -2,7 +2,8 @@
   "Tests for lookup functions"
   (:require [clojure.java.io :as io]
             [b-plus-tree core io nodes])
-  (:use clojure.test))
+  (:use clojure.test
+        b-plus-tree.test-utils))
 
 (def header-node
   {:count     6
@@ -103,22 +104,23 @@
           (is (= (first (b-plus-tree.core/find k raf header)) v)))))
     (io/delete-file "/tmp/RAF" true)))
 
-(deftest find-record-test
-  (testing "should display all records that the leaves point to"
-    (with-open [raf (new java.io.RandomAccessFile "/tmp/raf" "rwd")]
-      (populate-file nodes raf)
-      (doall (map (fn [node]
-                    (doall (map (fn [[key ptr]]
-                                  (is
-                                   (=
-                                    (b-plus-tree.io/read-node ptr raf)
-                                    (first
-                                     (b-plus-tree.core/find-record key
-                                                                   node
-                                                                   raf)))))
-                                (:key-ptrs node))))
-                  leaf-nodes))
-      (io/delete-file "/tmp/RAF" true))))
+(with-private-fns [b-plus-tree.core [find-record]]
+  (deftest find-record-test
+    (testing "should display all records that the leaves point to"
+      (with-open [raf (new java.io.RandomAccessFile "/tmp/raf" "rwd")]
+        (populate-file nodes raf)
+        (doall (map (fn [node]
+                      (doall (map (fn [[key ptr]]
+                                    (is
+                                     (=
+                                      (b-plus-tree.io/read-node ptr raf)
+                                      (first
+                                       (find-record key
+                                                    node
+                                                    raf)))))
+                                  (:key-ptrs node))))
+                    leaf-nodes))
+        (io/delete-file "/tmp/RAF" true)))))
 
 (comment
   (deftest retreive
