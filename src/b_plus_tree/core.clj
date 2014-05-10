@@ -253,7 +253,7 @@
            cache      (cache-nodes [left-node right-node]
                                    raf
                                    cache)]
-       [[mid-k right-offset], header, cache])))
+       [header, cache, [mid-k right-offset]])))
 
 (defn- split-leaf
   "Splits a :leaf node. Do not attempt to split another type of node.
@@ -287,11 +287,68 @@
            cache      (cache-nodes [left-node right-node]
                                    raf
                                    cache)]
-       [[raised-key right-offset], header, cache])))
+       [header, cache, [raised-key right-offset]])))
+
+(defn- split-node
+  "Splits any type of node."
+  ([{:keys [type] :as node} & rest]
+     (apply (case type
+              :root-leaf    split-root-leaf
+              :root-nonleaf split-root-nonleaf
+              :internal     split-internal
+              :leaf         split-leaf
+              (throw (ex-info "Invalid node" {})))
+            node rest)))
+
+(defn- insert-parent
+  "Inserts a new key and pointer into a parent node, and returns the node."
+  ([key ptr
+    {:keys [key-ptrs last]
+     :as parent}]
+     (if-let [entry (->> key-ptrs
+                         (drop-while (fn [[k p]] (pos? (compare key k))))
+                         first)]
+       ; there is an entry [k p] which comes after key in the sequence,
+       ; so we must make the new key point to p, and k point to the
+       ; new ptr
+       (let [[k p]    entry
+             key-ptrs (assoc key-ptrs
+                        key p
+                        k ptr)]
+         (assoc parent
+           :key-ptrs key-ptrs
+           :altered? true))
+       ; key is the last entry in the sequence, so we must make it
+       ; point to what :last currently points to, and make :last point
+       ; to the new ptr
+       (let [key-ptrs (assoc key-ptrs
+                        key last)]
+         (assoc parent
+           :key-ptrs key-ptrs
+           :last     ptr
+           :altered? true)))))
 
 (defn- insert-split
-  ([])
-  )
+  ([node stack raf
+    {:keys [order]
+     :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[header, cache, [key ptr]]
+           (split-node node raf header
+                       :cache cache)]
+       (if (seq stack)
+         ; push up key to parent
+         (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
+               parent         (insert-parent key ptr parent)
+               cache          (cache-node parent raf cache)]
+           (if (b-plus-tree.nodes/full? parent order)
+             ; parent is full, split parent
+             (recur parent stack raf header {:cache cache})
+             ; finished splitting
+             [header, cache]))
+         ; nothing left to split
+         [header, cache]))))
 
 (defn insert
   "Inserts a key-value pair into the B+ Tree. Returns a vector whose first
@@ -319,7 +376,7 @@
        (let [[root cache] (get-node root-ptr raf cache)
              [record stack cache] (find-stack key raf header
                                               :cache cache)
-             leaf (last stack)]
+             [stack leaf] (b-plus-tree.seq/pop-stack stack)]
          (if record ; record already exists, overwrite
            [header, (cache-node (assoc record
                                   :data val
@@ -336,7 +393,8 @@
                          :count (inc size))]
             (if (b-plus-tree.nodes/full? leaf order)
               ; leaf is full, split
-              (throw (new UnsupportedOperationException))
+              (insert-split leaf stack raf header
+                            :cache (cache-node record raf cache))
               ; leaf has room, return
               [header, (cache-nodes [leaf record]
                                     raf

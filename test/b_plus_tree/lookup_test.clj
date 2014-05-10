@@ -91,7 +91,7 @@
 
 (deftest find
   (testing "finding all records"
-    (with-open [raf (new java.io.RandomAccessFile "/tmp/raf" "rwd")]
+    (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (b-plus-tree.io/write-header header-node raf)
       (populate-file nodes raf)
       (let [header (b-plus-tree.io/read-header raf)]
@@ -107,7 +107,7 @@
 (with-private-fns [b-plus-tree.core [find-record]]
   (deftest find-record-test
     (testing "should display all records that the leaves point to"
-      (with-open [raf (new java.io.RandomAccessFile "/tmp/raf" "rwd")]
+      (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
         (populate-file nodes raf)
         (doall (map (fn [node]
                       (doall (map (fn [[key ptr]]

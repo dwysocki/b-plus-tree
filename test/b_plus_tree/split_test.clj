@@ -194,7 +194,7 @@
                         :offset right-offset
                         :altered? true},
             
-            [[raised-key raised-offset] header cache]
+            [header cache [raised-key raised-offset]]
             (split-internal orig-node nil header)]
         (is (= left-node (cache orig-offset)))
         (is (= right-node (cache right-offset)))
@@ -229,7 +229,7 @@
                         :offset right-offset
                         :altered? true},
             
-            [[raised-key raised-offset] header cache]
+            [header cache [raised-key raised-offset]]
             (split-internal orig-node nil header)]
         (is (= left-node (cache orig-offset)))
         (is (= right-node (cache right-offset)))
@@ -266,7 +266,7 @@
                         :offset right-offset
                         :altered? true},
 
-            [[raised-key raised-offset] header cache]
+            [header cache [raised-key raised-offset]]
             (split-leaf orig-leaf nil header)]
         (is (= raised-key "C"))
         (is (= raised-offset right-offset))
@@ -305,7 +305,7 @@
                         :offset right-offset
                         :altered? true},
 
-            [[raised-key raised-offset] header cache]
+            [header cache [raised-key raised-offset]]
             (split-leaf orig-leaf nil header)]
         (is (= raised-key "C"))
         (is (= raised-offset right-offset))

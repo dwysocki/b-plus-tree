@@ -149,8 +149,8 @@ fields."
      (case (:type node)
        :root-leaf    1
        :root-nonleaf 2
-       :internal     (-> order (/ 2) Math/ceil)
-       :leaf         (-> order (/ 2) Math/floor)
+       :internal     (-> order inc (quot 2))
+       :leaf         (-> order (quot 2))
        nil)))
 
 (defn max-children

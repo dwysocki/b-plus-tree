@@ -38,3 +38,9 @@
   ([n] `(step-range 0 ~n 1))
   ([start n] `(step-range ~start ~n 1))
   ([start n step] `(range ~start (+ ~start (* ~n ~step)) ~step)))
+
+(defn pop-stack
+  "Splits a coll representing a stack into a 2 element vector, where the first
+  element is the stack after popping, and the second element is the element
+  which was popped."
+  ([coll] [(pop coll) (peek coll)]))
