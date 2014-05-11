@@ -15,10 +15,10 @@
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (let [header (b-plus-tree.io/read-header raf)
             [header cache] (b-plus-tree.core/insert "foo" "bar" raf header)
-            [cached-data cache] (b-plus-tree.core/find "foo" raf header
-                                                       :cache cache)
+            [cached-data cache] (b-plus-tree.core/find-val "foo" raf header
+                                                           :cache cache)
             _ (b-plus-tree.io/write-cache cache raf)
-            [uncached-data cache] (b-plus-tree.core/find "foo" raf header)]
+            [uncached-data cache] (b-plus-tree.core/find-val "foo" raf header)]
         (is (= "bar" cached-data uncached-data))))
     (io/delete-file "/tmp/RAF" true)))
 

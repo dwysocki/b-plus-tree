@@ -89,7 +89,7 @@
                  nodes))))
 
 
-(deftest find
+(deftest find-test
   (testing "finding all records"
     (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
       (b-plus-tree.io/write-header header-node raf)
@@ -101,7 +101,7 @@
                        "d" "http://www.d.com",
                        "e" "http://www.e.com",
                        "f" "http://www.f.com"}]
-          (is (= (first (b-plus-tree.core/find k raf header)) v)))))
+          (is (= (first (b-plus-tree.core/find-val k raf header)) v)))))
     (io/delete-file "/tmp/RAF" true)))
 
 (with-private-fns [b-plus-tree.core [find-record]]
@@ -121,20 +121,6 @@
                                   (:key-ptrs node))))
                     leaf-nodes))
         (io/delete-file "/tmp/RAF" true)))))
-
-(comment
-  (deftest retreive
-    (testing "retreiving all records"
-      (with-open [raf (new java.io.RandomAccessFile "/tmp/RAF" "rwd")]
-        (doseq [[ptr node] nodes]
-          (b-plus-tree.io/write-node node raf))
-        (doseq [[key record-node] (map list
-                                       ["a" "b" "c" "d" "e" "f"]
-                                       (vals (sort record-nodes)))]
-          (println "key:" key)
-          (is (= (b-plus-tree.core/find key 100 raf)
-                 (:data record-node)))))
-      (io/delete-file "/tmp/RAF"))))
 
 (comment
   (deftest slice

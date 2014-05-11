@@ -114,7 +114,7 @@
             (recur key types nxt stack raf
                    {:cache cache})))))))
 
-(defn find
+(defn find-val
   "Returns the value associated with key by traversing the entire tree, or
   nil if not found."
   ([key raf {cnt :count, size :key-size, root-ptr :root :as header} &
@@ -418,8 +418,8 @@
   ([m raf header
     & {:keys [cache]
        :or {cache {}}}]
-     (every? identity (map (fn [[k v]] (= v (first (find k raf header
-                                                        :cache cache))))
+     (every? identity (map (fn [[k v]] (= v (first (find-val k raf header
+                                                            :cache cache))))
                            m))))
 
 (defn map-equals?
