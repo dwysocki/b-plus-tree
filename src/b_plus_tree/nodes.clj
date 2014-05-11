@@ -11,7 +11,7 @@
   :int64)
 
 (gloss.core/defcodec- C-string
-  (gloss.core/string :ascii :delimiters ["\0"]))
+  (gloss.core/string :utf-8 :delimiters ["\0"]))
 
 (gloss.core/defcodec- key-list
   (gloss.core/repeated C-string))

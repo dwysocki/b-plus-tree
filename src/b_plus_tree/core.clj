@@ -140,7 +140,6 @@
              [record stack cache]
              (find-type-stack key #{:record} root [] raf
                               :cache cache)]
-;         (println "herp" [record stack cache])
          [record, stack, cache])
        [nil, [], cache])))
 
@@ -365,6 +364,7 @@
      {:pre [(>= key-size (count key))
             (>= val-size (count val))]}
      (if (zero? size)
+       ; empty B+ Tree
        (let [[root record] (b-plus-tree.nodes/new-root key val free page-size)]
          [(assoc header
             :count 1
@@ -377,28 +377,30 @@
              [record stack cache] (find-stack key raf header
                                               :cache cache)
              [stack leaf] (b-plus-tree.seq/pop-stack stack)]
-         (if record ; record already exists, overwrite
+         (if record
+           ; record already exists, overwrite
            [header, (cache-node (assoc record
                                   :data val
                                   :altered? true)
                                 raf
                                 cache)]
-          (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
-                record {:type :record
-                        :data val
-                        :offset free
-                        :altered? true}
-                header (assoc header
-                         :free (+ free page-size)
-                         :count (inc size))]
-            (if (b-plus-tree.nodes/full? leaf order)
-              ; leaf is full, split
-              (insert-split leaf stack raf header
-                            :cache (cache-node record raf cache))
-              ; leaf has room, return
-              [header, (cache-nodes [leaf record]
-                                    raf
-                                    cache)])))))))
+           ; record does not exist, insert at leaf
+           (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
+                 record {:type :record
+                         :data val
+                         :offset free
+                         :altered? true}
+                 header (assoc header
+                          :free (+ free page-size)
+                          :count (inc size))]
+             (if (b-plus-tree.nodes/full? leaf order)
+               ; leaf is full, begin splitting
+               (insert-split leaf stack raf header
+                             :cache (cache-node record raf cache))
+               ; leaf has room, return
+               [header, (cache-nodes [leaf record]
+                                     raf
+                                     cache)])))))))
 
 (defn insert-all
   "Inserts all key-vals from a map into the tree."

@@ -110,11 +110,6 @@
   ([{:keys [offset] :as node} raf]
      (let [encoded-node (gloss.io/encode nodes/node node)
            size (gloss.core/byte-count encoded-node)]
-       (comment
-         (doall
-          (map println
-               ["offset" "encoded" "size"]
-               [offset encoded-node size])))
        (doto raf
          (.seek offset)
          (.writeShort size)
@@ -127,13 +122,12 @@
      (->> cache
           vals
           (filter :altered?)
-;          (fn [x] (println x) x)
-;          doall
           (map #(write-node % raf))
           doall)))
 
-(defn write-cache
-  ([cache raf]
-     (let [nodes (vals cache)
-           altered-nodes (filter :altered? nodes)]
-       (doall (map #(write-node % raf) altered-nodes)))))
+(comment
+  (defn write-cache
+    ([cache raf]
+       (let [nodes (vals cache)
+             altered-nodes (filter :altered? nodes)]
+         (doall (map #(write-node % raf) altered-nodes))))))
