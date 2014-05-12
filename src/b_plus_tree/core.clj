@@ -27,10 +27,12 @@
 (defn- get-node
   "Reads the node from disc only if it is not already in the cache"
   ([ptr raf cache]
-     (if-let [node (cache ptr)]
-       [node cache]
-       (let [node (b-plus-tree.io/read-node ptr raf)]
-         [node (cache-node node raf cache)]))))
+     (if (neg? ptr)
+       [nil cache]
+       (if-let [node (cache ptr)]
+         [node cache]
+         (let [node (b-plus-tree.io/read-node ptr raf)]
+           [node (cache-node node raf cache)])))))
 
 (defn- next-ptr
   "Returns the next pointer when searching the tree for key in node."
@@ -341,7 +343,7 @@
          (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
                parent         (insert-parent key ptr parent)
                cache          (cache-node parent raf cache)]
-           (if (b-plus-tree.nodes/full? parent order)
+           (if (b-plus-tree.nodes/overfull? parent order)
              ; parent is full, split parent
              (recur parent stack raf header {:cache cache})
              ; finished splitting
@@ -393,7 +395,7 @@
                  header (assoc header
                           :free (+ free page-size)
                           :count (inc size))]
-             (if (b-plus-tree.nodes/full? leaf order)
+             (if (b-plus-tree.nodes/overfull? leaf order)
                ; leaf is full, begin splitting
                (insert-split leaf stack raf header
                              :cache (cache-node record raf cache))
@@ -414,6 +416,158 @@
                                                      :cache cache)]
          (recur (next keyvals) raf header {:cache cache}))
        [header cache])))
+
+(defn- replace-key
+  "Replaces key with replacement-key in the stack of internal nodes.
+  Returns the cache.
+  Throws an exception if key is not found in the stack."
+  ([key replacement-key stack raf
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[stack node] (b-plus-tree.seq/pop-stack stack)
+           key-ptrs (:key-ptrs node)
+           ptr (key-ptrs key)]
+       (cond
+        ; key exists in this node
+        ptr (let [key-ptrs (-> key-ptrs
+                               (dissoc key)
+                               (assoc  replacement-key ptr))
+                  node     (assoc node
+                             :key-ptrs key-ptrs)]
+              (cache-node node raf cache))
+        ; key is somewhere in stack
+        (seq stack) (recur key replacement-key stack raf {:cache cache})
+        
+        :default ; key was not in stack, a bug
+        (throw (ex-info "Key missing from internal nodes" {}))))))
+
+(defn- steal-prev
+  "Steals a key-ptr from prev-leaf into leaf.
+  Stolen key will become leaf's first key, so that key must be replaced
+  in the internal nodes with the stolen key."
+  ([leaf key prev-leaf stack raf cache]
+     (println "LEAF:" leaf)
+     (println "PREV:" prev-leaf)
+     (let [first-key (-> leaf :key-ptrs first first)
+           internal-key (b-plus-tree.util/min-string key first-key)
+           [stolen-key stolen-ptr] (-> prev-leaf :key-ptrs last)
+           prev-leaf (b-plus-tree.nodes/leaf-dissoc stolen-key prev-leaf)
+           leaf (b-plus-tree.nodes/leaf-assoc stolen-key stolen-ptr leaf)]
+       (println "REPLACING" first-key
+                "WITH"      stolen-key)
+       (replace-key internal-key stolen-key stack raf
+                    :cache (cache-nodes [leaf prev-leaf] raf cache)))))
+
+(defn- steal-next
+  "Steals a key-ptr from next-leaf into leaf.
+  Stolen key will be next-leaf's first key, so that key must be replaced
+  in the internal nodes with the new first key.."
+  ([leaf key next-leaf stack raf header cache]
+     (println "LEAF:" leaf)
+     (println "NEXT:" next-leaf)
+     (let [[[stolen-key stolen-ptr] [second-key _]]
+           (->> next-leaf :key-ptrs (take 2))
+           [_ stolen-stack cache] (find-stack stolen-key raf header
+                                              :cache cache)
+           next-leaf (b-plus-tree.nodes/leaf-dissoc stolen-key next-leaf)
+           leaf (b-plus-tree.nodes/leaf-assoc stolen-key stolen-ptr leaf)
+           cache
+           (replace-key stolen-key second-key stolen-stack raf
+                        :cache (cache-nodes [leaf next-leaf] raf cache))
+           first-key (-> leaf :key-ptrs first first)]
+       (if (neg? (compare key first-key))
+         ; before entering this function, the first key in leaf was
+         ; removed, so now we need to propogate that change up the tree
+         (replace-key key first-key stack raf
+                      :cache cache)
+         ; first key in leaf was not removed
+         cache))))
+
+(defn- steal-merge
+  "Attempts to steal from leaf's neighbors, and if it can't, merges."
+  ([{:keys [prev next]
+     :as leaf}
+    key stack raf
+    {:keys [order]
+     :as header}
+    cache]
+     (let [[prev-leaf cache] (get-node prev raf cache)
+           [next-leaf cache] (get-node next raf cache)]
+       (cond
+        ; prev-leaf exists and can be stolen from
+        (and prev-leaf (b-plus-tree.nodes/shrinkable? prev-leaf order))
+        (steal-prev leaf key prev-leaf stack raf cache)
+        ; next-leaf exists and can be stolen from
+        (and next-leaf (b-plus-tree.nodes/shrinkable? next-leaf order))
+        (steal-next leaf key next-leaf stack raf header cache)
+        ; prev and next leaves cannot be stolen from, merge
+        :default
+        (throw (new UnsupportedOperationException "Merge not implemented."))))))
+
+(defn delete
+  "Deletes key from the B+ Tree. Returns [header cache].
+  All altered nodes in the cache have an [:altered? true] entry."
+  ([key raf
+    {size :count, root-ptr :root
+     :keys [order key-size val-size page-size]
+     :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     {:pre [(>= key-size (count key))]}
+     (case size
+       ; tree is empty, do nothing
+       0 [header, cache]
+       ; tree has one entry, just stop pointing to it
+       1 [(assoc header
+            :count 0
+            :root  -1
+            :free  page-size),
+          {}]
+       ; tree has multiple entries remaining
+       (let [[root cache] (get-node root-ptr raf cache)
+             [record stack cache] (find-stack key raf header
+                                              :cache cache)
+             [stack leaf] (b-plus-tree.seq/pop-stack stack)
+             ; unpack leaf
+             {:keys [type key-ptrs]} leaf]
+         (println "before:" leaf)
+         (if (key-ptrs key)
+           ; leaf contains key, remove it
+           (let [header (assoc header
+                          :count (dec size))
+                 cache
+                 (if (or
+                      ; leaf is the root
+                      (= type :root-leaf)
+                      ; leaf is the left-most leaf
+                      (= (:prev leaf) -1)
+                      ; key is not the left-most key in the leaf
+                      (not= key (-> leaf first first)))
+                   ; key is not repeated in internal nodes
+                   (let [leaf (b-plus-tree.nodes/leaf-dissoc key leaf)]
+                     (println "after:" leaf)
+                     (if (b-plus-tree.nodes/underfull? leaf order)
+                       ; leaf is underfull, steal or merge
+                       (steal-merge leaf key stack raf header cache)
+                       ; leaf contains enough elements, delete is finished
+                       (cache-node leaf raf cache)))
+                   ; key is repeated in internal nodes
+                   (let [leaf    (b-plus-tree.nodes/leaf-dissoc key leaf)
+                         ; key which needs to replace the deleted key
+                         ; in internal nodes
+                         replacement-key (-> leaf :key-ptrs first first)]
+                     (if (b-plus-tree.nodes/underfull? leaf order)
+                       ; leaf is underfull, begin steal or merge
+                       (steal-merge leaf key stack raf header cache)
+                       ; leaf contains enough elements, simply replace key
+                       ; with replacement-key in internal nodes
+                       (replace-key key replacement-key stack raf
+                                    :cache (cache-node leaf raf cache)))))]
+             ; key was removed, remove changed header and cache
+             [header, cache])
+
+           ; key doesn't exist, return header and cache unchanged
+           [header, cache])))))
 
 (defn map-subset?
   "Returns true if the map m is a subset of the B+ Tree, else nil."

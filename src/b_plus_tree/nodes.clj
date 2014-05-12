@@ -1,7 +1,7 @@
 (ns b-plus-tree.nodes
   "Defines encodings for the different types of nodes used in the B+ Tree."
   (:require [gloss core]
-            [b-plus-tree.util :refer [dbg verbose]]))
+            [b-plus-tree.util :refer [dissoc-in dbg verbose]]))
 
 (gloss.core/defcodec- node-types
   (gloss.core/enum :byte
@@ -127,13 +127,19 @@ fields."
   ([node] (map list (:keys node) (:children node))))
 
 (defn leaf-assoc
-  "Given a leaf node, returns that node with key and ptr inserted at the
-  correct position in :keys and :children."
+  "Given a leaf node, returns that node with key and ptr inserted"
   {:arglists '([key ptr leaf])}
   ([key ptr {:keys [key-ptrs] :as leaf}]
      (assoc leaf
        :key-ptrs (assoc key-ptrs key ptr)
        :altered? true)))
+
+(defn leaf-dissoc
+  "Given a leaf node, returns that node with key removed."
+  ([key {:keys [key-ptrs] :as leaf}]
+     (-> leaf
+         (dissoc-in [:key-ptrs key])
+         (assoc :altered? true))))
 
 (defn count-children
   "Returns the number of children node has"
@@ -163,8 +169,20 @@ fields."
        :leaf         (dec order)
        nil)))
 
-(defn full?
-  "Returns true if the node is full."
+(defn overfull?
+  "Returns true if the node is overfull."
   ([node order]
-     (>= (count-children node)
+     (> (count-children node)
          (max-children node order))))
+
+(defn underfull?
+  "Returns true if the node is underfull."
+  ([node order]
+     (< (count-children node)
+        (min-children node order))))
+
+(defn shrinkable?
+  "Returns true if the node can be borrowed from."
+  ([node order]
+     (> (count-children node)
+        (min-children node order))))
