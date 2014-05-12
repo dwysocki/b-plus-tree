@@ -433,7 +433,8 @@
                                (dissoc key)
                                (assoc  replacement-key ptr))
                   node     (assoc node
-                             :key-ptrs key-ptrs)]
+                             :key-ptrs key-ptrs
+                             :altered? true)]
               (cache-node node raf cache))
         ; key is somewhere in stack
         (seq stack) (recur key replacement-key stack raf {:cache cache})
