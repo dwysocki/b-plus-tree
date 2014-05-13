@@ -484,6 +484,10 @@
          ; first key in leaf was not removed
          cache))))
 
+(defn- merge
+  "Recursively merges node."
+  ([node ]))
+
 (defn- steal-merge
   "Attempts to steal from leaf's neighbors, and if it can't, merges."
   ([{:keys [prev next]
@@ -588,7 +592,103 @@
        :or {cache {}}}]
      (when (= size (count m))
        (map-subset? m raf header
-                   :cache cache))))
+                    :cache cache))))
+
+(defn- lowest-leaf
+  "Returns the lowest leaf in sorted order starting at node."
+  ([node raf header cache]
+     (if (b-plus-tree.nodes/leaf? node)
+       node
+       (let [next-ptr (-> node :key-ptrs first second)
+             [next-node cache] (get-node next-ptr raf cache)]
+         (recur next-node raf header cache)))))
+
+(defn- highest-leaf
+  "Returns the highest leaf in sorted order starting at node."
+  ([node raf header cache]
+     (if (b-plus-tree.nodes/leaf? node)
+       node
+       (let [next-ptr (:last node)
+             [next-node cache] (get-node next-ptr raf cache)]
+         (recur next-node raf header cache)))))
+
+(defn- key-ptr->key-val
+  "Given the key-ptr entry from a leaf node, replaces ptr with the value
+  it points to."
+  ([[key ptr] raf cache]
+     (let [[record _] (get-node ptr raf cache)]
+       [key (:data record)])))
+
+(defn lowest-entry
+  "Returns the lowest entry in the tree."
+  ([raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[root cache] (get-node (:root header) raf cache)]
+       (-> (lowest-leaf root raf header cache)
+           :key-ptrs
+           first
+           (key-ptr->key-val raf cache)))))
+
+(defn highest-entry
+  "Returns the highest entry in the tree."
+  ([raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[root cache] (get-node (:root header) raf cache)]
+       (-> (highest-leaf root raf header cache)
+           :key-ptrs
+           last
+           (key-ptr->key-val raf cache)))))
+
+(def lowest-key
+  ^{:tag String
+    :doc "Returns the lowest key in the tree."
+    :arglists '([raf header {cache :cache}])}
+  (comp first lowest-entry))
+
+(def highest-key
+  ^{:tag String
+    :doc "Returns the highest key in the tree."
+    :arglists '([raf header {cache :cache}])}
+  (comp first highest-entry))
+
+(defn leaf-seq
+  "Returns a seq of all the leaf nodes in the B+ Tree."
+  ([raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [[root cache] (get-node (:root header) raf cache)
+           first-node (lowest-leaf root raf header cache)
+           step (fn step [prev-node]
+                  (let [[next-node _] (get-node (:next prev-node) raf cache)]
+                    (when next-node
+                      (cons next-node (lazy-seq (step next-node))))))]
+       (cons first-node (lazy-seq (step first-node))))))
+
+(defn keyval-seq
+  "Returns a seq of all the key-value pairs in the B+ Tree."
+  ([raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [leaf-seq (leaf-seq raf header
+                              :cache cache)
+           key-ptrs (-> leaf-seq first :key-ptrs)
+           leaf-seq (rest leaf-seq)
+           step (fn step [key-ptrs leaf-seq]
+                  (cond
+                   ; still have key-ptrs from this node
+                   (seq key-ptrs)
+                   (let [entry (first key-ptrs)]
+                     (cons (key-ptr->key-val entry raf cache)
+                           (lazy-seq (step (rest key-ptrs)
+                                           leaf-seq))))
+
+                   ; still have leaves to go
+                   (seq leaf-seq)
+                   (step (-> leaf-seq first :key-ptrs)
+                         (rest leaf-seq))))]
+       (lazy-seq (step key-ptrs leaf-seq)))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

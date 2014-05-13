@@ -122,6 +122,38 @@
                     leaf-nodes))
         (io/delete-file "/tmp/RAF" true)))))
 
+(deftest lowest-highest-test
+  (testing "find the lowest and highest leaves in a tree"
+    (delete-file)
+    (new-tree)
+    (with-open [raf (get-raf)]
+      (let [header (get-header raf)
+            keyvals (numbered-strings 1000)
+            [header cache]
+            (b-plus-tree.core/insert-all keyvals raf header)
+            lowest (-> keyvals first first)
+            highest (-> keyvals last first)]
+        (is (= lowest (b-plus-tree.core/lowest-key raf header
+                                                   :cache cache)))
+        (is (= highest (b-plus-tree.core/highest-key raf header
+                                                     :cache cache)))))
+    (delete-file)))
+
+(deftest seq-test
+  (testing "iterating through the tree's keyvals"
+    (delete-file)
+    (new-tree)
+    (with-open [raf (get-raf)]
+      (let [header         (get-header raf)
+            keyvals        (numbered-strings 1000)
+            [header cache] (b-plus-tree.core/insert-all keyvals raf header)]
+        (doall (b-plus-tree.core/leaf-seq raf header
+                                          :cache cache))
+        (is (= (seq keyvals)
+               (b-plus-tree.core/keyval-seq raf header
+                                            :cache cache)))))
+    (delete-file)))
+
 (comment
   (deftest slice
     (testing "slicing tree"
