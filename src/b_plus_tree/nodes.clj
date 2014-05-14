@@ -128,18 +128,18 @@ fields."
 
 (defn leaf-assoc
   "Given a leaf node, returns that node with key and ptr inserted"
-  {:arglists '([key ptr leaf])}
-  ([key ptr {:keys [key-ptrs] :as leaf}]
+  {:arglists '([leaf & keyptrs])}
+  ([{:keys [key-ptrs] :as leaf} & keyptrs]
      (assoc leaf
-       :key-ptrs (assoc key-ptrs key ptr)
+       :key-ptrs (apply assoc key-ptrs keyptrs)
        :altered? true)))
 
 (defn leaf-dissoc
   "Given a leaf node, returns that node with key removed."
-  ([key {:keys [key-ptrs] :as leaf}]
-     (-> leaf
-         (dissoc-in [:key-ptrs key])
-         (assoc :altered? true))))
+  ([{:keys [key-ptrs] :as leaf} & keys]
+     (assoc leaf
+       :key-ptrs (apply dissoc key-ptrs keys)
+       :altered? true)))
 
 (defn count-children
   "Returns the number of children node has"

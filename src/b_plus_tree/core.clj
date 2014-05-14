@@ -389,7 +389,7 @@
                                 raf
                                 cache)]
            ; record does not exist, insert at leaf
-           (let [leaf (b-plus-tree.nodes/leaf-assoc key free leaf)
+           (let [leaf (b-plus-tree.nodes/leaf-assoc leaf key free)
                  record {:type :record
                          :data val
                          :offset free
@@ -434,7 +434,6 @@
            replaced-keys (apply clojure.set/intersection
                                 (map (comp set keys)
                                      [key-replacements key-ptrs]))
-           _ (println "replaced keys:" replaced-keys)
 
            updated-key-ptrs (clojure.set/rename-keys key-ptrs
                                                      key-replacements)
@@ -445,11 +444,11 @@
                     :altered? true)
                   ; keys were not replaced
                   node)
-           _ (println "altered?" (empty? replaced-keys))
+;           _ (println "altered?" (empty? replaced-keys))
            ; remove entries from key-replacements which have been used
            key-replacements (apply dissoc key-replacements
                                    replaced-keys)
-           _ (println "replacements remaining:" key-replacements)
+;           _ (println "replacements remaining:" key-replacements)
 
            cache (cache-node node raf cache)]
        (cond
@@ -506,7 +505,6 @@
   Stolen key will become leaf's first key, so that key must be replaced
   in the internal nodes with the stolen key."
   ([leaf deleted-key prev-leaf stack raf cache]
-     (println "STEAL PREV\n")
      (let [; key currently at the front of leaf's key-ptrs
            first-key (-> leaf :key-ptrs first first)
            ; either the deleted key, or the first key has a copy in
@@ -516,9 +514,9 @@
            ; get the last key from the previous leaf
            [stolen-key stolen-ptr] (-> prev-leaf :key-ptrs last)
            ; delete the last key from the previous leaf
-           prev-leaf (b-plus-tree.nodes/leaf-dissoc stolen-key prev-leaf)
+           prev-leaf (b-plus-tree.nodes/leaf-dissoc prev-leaf stolen-key)
            ; add the stolen key to the leaf
-           leaf (b-plus-tree.nodes/leaf-assoc stolen-key stolen-ptr leaf)]
+           leaf (b-plus-tree.nodes/leaf-assoc leaf stolen-key stolen-ptr)]
        ; replace the key in the internal nodes with the stolen key
        (replace-keys {internal-key stolen-key} stack raf
                      (cache-nodes [leaf prev-leaf] raf cache)))))
@@ -528,16 +526,15 @@
   Stolen key will be next-leaf's first key, so that key must be replaced
   in the internal nodes with the new first key.."
   ([leaf deleted-key next-leaf stack raf header cache]
-     (println "STEAL NEXT\n")
      (let [; get the first key and ptr from the next leaf, and get
            ; the key that will become the first key so you can push it
            ; up through the internal nodes
            [[stolen-key stolen-ptr] [second-key _]]
            (->> next-leaf :key-ptrs (take 2))
            ; remove the stolen key/ptr from next-leaf
-           next-leaf (b-plus-tree.nodes/leaf-dissoc stolen-key next-leaf)
+           next-leaf (b-plus-tree.nodes/leaf-dissoc next-leaf stolen-key)
            ; add the stolen key/ptr to leaf
-           leaf (b-plus-tree.nodes/leaf-assoc stolen-key stolen-ptr leaf)
+           leaf (b-plus-tree.nodes/leaf-assoc leaf stolen-key stolen-ptr)
            ; push the key which succeeds stolen-key up into the
            ; internal nodes
            first-key (-> leaf :key-ptrs first first)
@@ -559,6 +556,16 @@
        (replace-keys replacement-keys stack raf
                      (cache-nodes [leaf next-leaf] raf cache)))))
 
+(defn- merge-prev-leaf
+  "Merge leaf with the previous leaf."
+  ([leaf prev-leaf deleted-key stack raf header cache]
+     (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
+           ])))
+
+(defn- merge-next-leaf
+  "Merge leaf with the next leaf."
+  ([leaf next-leaf deleted-key stack raf header cache]))
+
 (defn- merge-nodes
   "Recursively merges node."
   ([node]))
@@ -572,9 +579,7 @@
      :as header}
     cache]
      (let [parent (peek stack)
-           _ (println "parent:" (:type parent))
            [prev-leaf next-leaf] (siblings leaf parent raf cache)]
-       (println "siblings:" (:type prev-leaf) "::" (:type next-leaf))
        (cond
         ; prev-leaf exists and can be stolen from
         (and prev-leaf (b-plus-tree.nodes/shrinkable? prev-leaf order))
@@ -584,10 +589,8 @@
         (steal-next leaf deleted-key next-leaf stack raf header cache)
         ; prev and next leaves cannot be stolen from, merge
         :default
-        (do (println "prev:" (and prev-leaf (count (:key-ptrs prev-leaf))))
-            (println "next:" (and next-leaf (count (:key-ptrs next-leaf))))
-            (throw (new UnsupportedOperationException
-                        "Merge not implemented.")))))))
+        (throw (new UnsupportedOperationException
+                    "Merge not implemented."))))))
 
 
 
@@ -631,7 +634,7 @@
                       ; key is not the left-most key in the leaf
                       (not= key (-> key-ptrs first first)))
                    ; key is not repeated in internal nodes
-                   (let [leaf (b-plus-tree.nodes/leaf-dissoc key leaf)]
+                   (let [leaf (b-plus-tree.nodes/leaf-dissoc leaf key)]
 ;                     (println "after:" leaf)
                      (if (b-plus-tree.nodes/underfull? leaf order)
                        ; leaf is underfull, steal or merge
@@ -639,7 +642,7 @@
                        ; leaf contains enough elements, delete is finished
                        (cache-node leaf raf cache)))
                    ; key is repeated in internal nodes
-                   (let [leaf (b-plus-tree.nodes/leaf-dissoc key leaf)
+                   (let [leaf (b-plus-tree.nodes/leaf-dissoc leaf key)
                          ; key which needs to replace the deleted key
                          ; in internal nodes
                          replacement-key (-> leaf :key-ptrs first first)]

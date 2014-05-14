@@ -119,6 +119,7 @@
                 (if-let [[k v] (first key-vals)]
                   (let [[remaining missing header cache]
                         (try
+                          (println "removing" k)
                           (let [[header cache]
                                 (b-plus-tree.core/delete k raf header
                                                          :cache cache)]
