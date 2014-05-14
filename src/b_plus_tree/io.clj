@@ -119,11 +119,12 @@
 (defn write-cache
   "Writes all nodes in the cache map which have been altered"
   ([cache raf]
-     (->> cache
-          vals
-          (filter :altered?)
-          (map #(write-node % raf))
-          doall)))
+     (and (seq cache)
+          (->> cache
+               vals
+               (filter :altered?)
+               (map #(write-node % raf))
+               doall))))
 
 (comment
   (defn write-cache

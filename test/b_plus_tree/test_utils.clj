@@ -26,6 +26,10 @@
   "Return a sorted-map of numbered strings {1 2, 3 4, ...}"
   ([n] (apply sorted-map (map str (range (* 2 n))))))
 
+(defn unsorted-numbered-strings
+  "Return a sorted-map of numbered strings {1 2, 3 4, ...}"
+  ([n] (apply hash-map (map str (range (* 2 n))))))
+
 (defmacro with-private-fns
   "Refers private fns from ns and runs tests in context.
   Author: Chris Houser <https://github.com/Chouser>"
