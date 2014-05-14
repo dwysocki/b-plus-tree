@@ -147,8 +147,9 @@
       (let [header         (get-header raf)
             keyvals        (numbered-strings 1000)
             [header cache] (b-plus-tree.core/insert-all keyvals raf header)]
-        (doall (b-plus-tree.core/leaf-seq raf header
-                                          :cache cache))
+        (comment ; prints all the leaves
+          (b-plus-tree.core/print-leaf-keys raf header
+                                            :cache cache))
         (is (= (seq keyvals)
                (b-plus-tree.core/keyval-seq raf header
                                             :cache cache)))))

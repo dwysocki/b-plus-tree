@@ -2,7 +2,7 @@
   "Functions needed for unit tests"
   (:require [clojure.java.io :as io]))
 
-(def ^:dynamic order    32)
+(def ^:dynamic order 32)
 (def key-size 32)
 (def val-size 32)
 (def filename "/tmp/RAF")
