@@ -435,7 +435,7 @@
                                 (map (comp set keys)
                                      [key-replacements key-ptrs]))
            _ (println "replaced keys:" replaced-keys)
-           
+
            updated-key-ptrs (clojure.set/rename-keys key-ptrs
                                                      key-replacements)
            node (if (seq replaced-keys)
@@ -445,12 +445,12 @@
                     :altered? true)
                   ; keys were not replaced
                   node)
-           _ (println "altered?" (:altered? node))
+           _ (println "altered?" (empty? replaced-keys))
            ; remove entries from key-replacements which have been used
            key-replacements (apply dissoc key-replacements
                                    replaced-keys)
            _ (println "replacements remaining:" key-replacements)
-           
+
            cache (cache-node node raf cache)]
        (cond
         ; have more nodes in stack and keys to replace
@@ -458,9 +458,8 @@
         (recur key-replacements stack raf cache)
         ; traversed entire stack, but still have keys to replace (bug)
         (seq key-replacements)
-        (throw (ex-info (str "Keys " (keys key-replacements)
-                             " missing from internal nodes")
-                        {}))
+        (throw (ex-info "Keys missing from internal nodes"
+                        {:missing-keys (keys key-replacements)}))
         ; successfully replaced all keys
         :default cache))))
 
@@ -485,7 +484,21 @@
                                                   (= mid node-offset))
                                                 triplets))
            [prev-node cache] (get-node prev-ptr raf cache)
-           [next-node cache] (get-node next-ptr raf cache)]
+           [next-node cache] (get-node next-ptr raf cache)
+           [p-node cache] (get-node (:prev node) raf cache)
+           [n-node cache] (get-node (:next node) raf cache)]
+       (comment
+         (println
+          (str "PTRS:\n"
+               triplets
+               "\n"
+               "EQ?\n"
+               "PREV:: "
+               "found: "    (:offset prev-node)
+               ", actual: " (:offset p-node) "\n"
+               "NEXT:: "
+               "found: "    (:offset next-node)
+               ", actual: " (:offset n-node))))
        [prev-node next-node])))
 
 (defn- steal-prev
@@ -493,6 +506,7 @@
   Stolen key will become leaf's first key, so that key must be replaced
   in the internal nodes with the stolen key."
   ([leaf deleted-key prev-leaf stack raf cache]
+     (println "STEAL PREV\n")
      (let [; key currently at the front of leaf's key-ptrs
            first-key (-> leaf :key-ptrs first first)
            ; either the deleted key, or the first key has a copy in
@@ -514,6 +528,7 @@
   Stolen key will be next-leaf's first key, so that key must be replaced
   in the internal nodes with the new first key.."
   ([leaf deleted-key next-leaf stack raf header cache]
+     (println "STEAL NEXT\n")
      (let [; get the first key and ptr from the next leaf, and get
            ; the key that will become the first key so you can push it
            ; up through the internal nodes
@@ -544,7 +559,6 @@
        (replace-keys replacement-keys stack raf
                      (cache-nodes [leaf next-leaf] raf cache)))))
 
-
 (defn- merge-nodes
   "Recursively merges node."
   ([node]))
@@ -553,19 +567,21 @@
   "Attempts to steal from leaf's neighbors, and if it can't, merges."
   ([{:keys [prev next]
      :as leaf}
-    key stack raf
+    deleted-key stack raf
     {:keys [order]
      :as header}
     cache]
      (let [parent (peek stack)
+           _ (println "parent:" (:type parent))
            [prev-leaf next-leaf] (siblings leaf parent raf cache)]
+       (println "siblings:" (:type prev-leaf) "::" (:type next-leaf))
        (cond
         ; prev-leaf exists and can be stolen from
         (and prev-leaf (b-plus-tree.nodes/shrinkable? prev-leaf order))
-        (steal-prev leaf key prev-leaf stack raf cache)
+        (steal-prev leaf deleted-key prev-leaf stack raf cache)
         ; next-leaf exists and can be stolen from
         (and next-leaf (b-plus-tree.nodes/shrinkable? next-leaf order))
-        (steal-next leaf key next-leaf stack raf header cache)
+        (steal-next leaf deleted-key next-leaf stack raf header cache)
         ; prev and next leaves cannot be stolen from, merge
         :default
         (do (println "prev:" (and prev-leaf (count (:key-ptrs prev-leaf))))
@@ -613,7 +629,7 @@
                       ; leaf is the left-most leaf
                       (= (:prev leaf) -1)
                       ; key is not the left-most key in the leaf
-                      (not= key (-> leaf first first)))
+                      (not= key (-> key-ptrs first first)))
                    ; key is not repeated in internal nodes
                    (let [leaf (b-plus-tree.nodes/leaf-dissoc key leaf)]
 ;                     (println "after:" leaf)
