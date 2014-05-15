@@ -425,10 +425,10 @@
   Returns the cache.
   Throws an exception if a key is not found in the stack."
   ([key-replacements stack raf cache]
-     (let [[stack
-            {:keys [key-ptrs]
-             :as node}]
+     (let [[stack node]
            (b-plus-tree.seq/pop-stack stack)
+
+           {:keys [key-ptrs] :as node} (get-node (:offset node) raf cache)
            
            ; set of all keys which will be replaced
            replaced-keys (apply clojure.set/intersection
@@ -507,7 +507,7 @@
      (let [ptr-keys (clojure.set/map-invert key-ptrs)]
        (ptr-keys ptr))))
 
-(defn- steal-prev
+(defn- steal-prev-leaf
   "Steals a key-ptr from prev-leaf into leaf.
   Stolen key will become leaf's first key, so that key must be replaced
   in the internal nodes with the stolen key."
@@ -528,11 +528,11 @@
        (replace-keys {internal-key stolen-key} stack raf
                      (cache-nodes [leaf prev-leaf] raf cache)))))
 
-(defn- steal-next
+(defn- steal-next-leaf
   "Steals a key-ptr from next-leaf into leaf.
   Stolen key will be next-leaf's first key, so that key must be replaced
   in the internal nodes with the new first key.."
-  ([leaf deleted-key next-leaf stack raf header cache]
+  ([leaf deleted-key next-leaf stack raf cache]
      (let [; get the first key and ptr from the next leaf, and get
            ; the key that will become the first key so you can push it
            ; up through the internal nodes
@@ -563,9 +563,13 @@
        (replace-keys replacement-keys stack raf
                      (cache-nodes [leaf next-leaf] raf cache)))))
 
+(defn- steal-prev-internal
+  "Steal a key-ptr from node's previous sibling."
+  ([]))
+
 (defn- merge-prev-leaf
   "Merge leaf with the previous leaf. Returns [parent cache]"
-  ([leaf prev-leaf deleted-key stack raf header cache]
+  ([leaf prev-leaf deleted-key stack raf cache]
      (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
            first-key (-> leaf :key-ptrs first first)
            ; the key to remove from the parent, which is either the
@@ -597,7 +601,7 @@
 
 (defn- merge-next-leaf
   "Merge leaf with the next leaf. Returns [parent cache]"
-  ([leaf next-leaf deleted-key stack raf header cache]
+  ([leaf next-leaf deleted-key stack raf cache]
      (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
            ; must delete the first key from next-leaf from the parent
            parent-key (-> next-leaf :key-ptrs first first)
@@ -639,7 +643,7 @@
 
 (defn- merge-internal
   "Merges two sibling internal nodes. Returns [parent cache]"
-  ([low-node high-node parent raf header cache]
+  ([low-node high-node parent raf cache]
      (let [; steal a key from parent
            stolen-key (key-by-ptr (:key-ptrs parent) (:offset low-node))
            merged-key-ptrs (into (sorted-map)
@@ -658,9 +662,25 @@
            cache (dissoc cache (:offset low-node))]
        [parent, cache])))
 
+(defn- merge-root-internal
+  "Merges two internal nodes into the root. Returns cache."
+  ([low-node high-node root raf cache]
+     (let [[_ cache] (merge-internal low-node high-node root raf cache)
+           ; root's :last now points to its *only* remaining child, so
+           ; now the root *becomes* that node
+           root (get-node (:last root) raf cache)
+           root (assoc root
+                  :type :root-nonleaf)]
+       (cache-node root raf cache))))
+
 (defn- merge-nodes
   "Recursively merges node."
-  ([node]))
+  ([node]
+     ;; IMPORTANT NOTE:
+     ; when going up the stack, after using replace-keys, the nodes on
+     ; the stack are no longer in the same state as the nodes in the
+     ; cache/disc, so after 
+     ))
 
 (defn- steal-merge
   "Attempts to steal from leaf's neighbors, and if it can't, merges."
@@ -675,10 +695,10 @@
        (cond
         ; prev-leaf exists and can be stolen from
         (and prev-leaf (b-plus-tree.nodes/shrinkable? prev-leaf order))
-        (steal-prev leaf deleted-key prev-leaf stack raf cache)
+        (steal-prev-leaf leaf deleted-key prev-leaf stack raf cache)
         ; next-leaf exists and can be stolen from
         (and next-leaf (b-plus-tree.nodes/shrinkable? next-leaf order))
-        (steal-next leaf deleted-key next-leaf stack raf header cache)
+        (steal-next-leaf leaf deleted-key next-leaf stack raf cache)
         ; prev and next leaves cannot be stolen from, merge
         :default
         (throw (new UnsupportedOperationException

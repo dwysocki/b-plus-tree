@@ -134,7 +134,7 @@
         (println (steal-merge (leaves 1200) "zzzzz" stack nil header cache))))))
 
 (with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
-                                     merge-internal]]
+                                     merge-internal cache-node]]
   (deftest merge-test
     (testing "testing merge functions"
       (println "prev-merging 2nd leaf with 1st")
@@ -144,7 +144,6 @@
                                               "zzzz"
                                               stack
                                               nil
-                                              header
                                               cache))
                             [100 500 1000 1100 1200 1300]))
       (println "prev-merging 3rd leaf with 2nd")
@@ -154,7 +153,6 @@
                                               "zzzz"
                                               stack
                                               nil
-                                              header
                                               cache))
                             [100 500 1000 1100 1200 1300]))
       (println "next-merging 1st leaf with 2nd")
@@ -164,7 +162,6 @@
                                               "zzzz"
                                               stack
                                               nil
-                                              header
                                               cache))
                             [100 500 1000 1100 1200 1300]))
       (println "next-merging 2nd leaf with 3rd")
@@ -174,21 +171,21 @@
                                               "zzzz"
                                               stack
                                               nil
-                                              header
                                               cache))
                             [100 500 1000 1100 1200 1300]))
       (println "next-merging 2nd leaf with 3rd, after removing first key")
-      (println (select-keys (second
-                             (merge-next-leaf
-                              (b-plus-tree.nodes/node-dissoc (leaves 1100)
-                                                             "c")
-                              (leaves 1200)
-                              "c"
-                              stack
-                              nil
-                              header
-                              cache))
-                            [100 500 1000 1100 1200 1300]))
+      (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
+            cache (cache-node node nil cache)]
+        (println (select-keys (second
+                               (merge-next-leaf
+                                node
+                                (leaves 1200)
+                                "c"
+                                stack
+                                nil
+                                cache))
+                              [100 500 1000 1100 1200 1300])))
+      
       (println "merging 1st internal with 2nd")
       (println (second
                 (merge-internal
@@ -196,7 +193,6 @@
                  (parents 2000)
                  root
                  nil
-                 header
                  cache)))
       )))
 
