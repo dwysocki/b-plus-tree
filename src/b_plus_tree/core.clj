@@ -428,7 +428,8 @@
      (let [[stack node]
            (b-plus-tree.seq/pop-stack stack)
 
-           {:keys [key-ptrs] :as node} (get-node (:offset node) raf cache)
+           [{:keys [key-ptrs] :as node} cache]
+           (get-node (:offset node) raf cache)
            
            ; set of all keys which will be replaced
            replaced-keys (apply clojure.set/intersection
@@ -661,6 +662,18 @@
            ; remove low-node from cache
            cache (dissoc cache (:offset low-node))]
        [parent, cache])))
+
+(defn- merge-root-leaf
+  "Merges the last two leaf nodes, making a root-leaf. Returns cache."
+  ([low-leaf high-leaf root raf cache]
+     (let [key-ptrs (apply merge (map :key-ptrs [low-leaf high-leaf]))
+           root-leaf {:type     :root-leaf
+                      :key-ptrs key-ptrs
+                      :offset   (:offset root)
+                      :altered? true}
+           cache (cache-node root-leaf raf cache)]
+       (apply dissoc cache
+              (map :offset [low-leaf high-leaf])))))
 
 (defn- merge-root-internal
   "Merges two internal nodes into the root. Returns cache."

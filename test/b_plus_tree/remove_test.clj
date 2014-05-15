@@ -176,15 +176,19 @@
       (println "next-merging 2nd leaf with 3rd, after removing first key")
       (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
             cache (cache-node node nil cache)]
-        (println (select-keys (second
-                               (merge-next-leaf
-                                node
-                                (leaves 1200)
-                                "c"
-                                stack
-                                nil
-                                cache))
-                              [100 500 1000 1100 1200 1300])))
+        (println "NOOODEEEE::::" node)
+        (try
+          (println (select-keys (second
+                                 (merge-next-leaf
+                                  node
+                                  (leaves 1200)
+                                  "c"
+                                  stack
+                                  nil
+                                  cache))
+                                [100 500 1000 1100 1200 1300]))
+          (catch clojure.lang.ExceptionInfo e
+            (println "EEEEEEEEE" (ex-data e)))))
       
       (println "merging 1st internal with 2nd")
       (println (second
@@ -193,8 +197,39 @@
                  (parents 2000)
                  root
                  nil
-                 cache)))
-      )))
+                 cache))))))
+
+(with-private-fns [b-plus-tree.core [cache-nodes merge-root-leaf]]
+  (deftest merge-root-leaf-test
+    (testing "merging root with leaves"
+      (let [low-leaf  {:type :leaf
+                       :key-ptrs (sorted-map "a" 1000
+                                             "b" 1100)
+                       :prev -1
+                       :next 300
+                       :offset 200},
+            high-leaf {:type :leaf
+                       :key-ptrs (sorted-map "c" 1200
+                                             "d" 1300)
+                       :prev 200
+                       :next -1
+                       :offset 300}
+            root {:type :root-nonleaf
+                  :key-ptrs (sorted-map "c" 200)
+                  :last 300
+                  :offset 100}
+            cache (cache-nodes [root low-leaf high-leaf] nil {})
+            ; what the cache should become after merging
+            expected-cache
+            {100 {:type :root-leaf
+                  :key-ptrs (sorted-map "a" 1000
+                                        "b" 1100
+                                        "c" 1200
+                                        "d" 1300)
+                  :offset   100
+                  :altered? true}}
+            cache (merge-root-leaf low-leaf high-leaf root nil cache)]
+        (is (= cache expected-cache))))))
 
 (deftest no-merge-test
   (testing "removing from B+ Tree without any merges"
@@ -230,7 +265,7 @@
 ;                            (println (.getMessage e))
                             [(assoc remaining k v), missing, header, cache])
                           (catch clojure.lang.ExceptionInfo e
-                            (println (.getMessage e))
+                            (println (.getMessage e) (ex-data e))
                             [remaining,
                              (apply conj missing
                                     (:missing-keys (ex-data e))),
