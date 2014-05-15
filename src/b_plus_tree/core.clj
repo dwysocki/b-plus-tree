@@ -647,16 +647,20 @@
   ([low-node high-node parent raf cache]
      (let [; steal a key from parent
            stolen-key (key-by-ptr (:key-ptrs parent) (:offset low-node))
+           _ (println "stole key:" stolen-key)
            merged-key-ptrs (into (sorted-map)
                                  (concat (:key-ptrs low-node)
                                          [[stolen-key (:last low-node)]]
                                          (:key-ptrs high-node)))
+           _ (println "new ptrs" merged-key-ptrs)
            merged-node {:type :internal
                         :key-ptrs merged-key-ptrs
                         :last (:last high-node)
                         :offset (:offset high-node)
                         :altered? true}
+           _ (println "parent before" parent)
            parent (b-plus-tree.nodes/node-dissoc parent stolen-key)
+           _ (println "parent after" parent)
            ; cache altered nodes
            cache (cache-nodes [merged-node, parent] raf cache)
            ; remove low-node from cache
@@ -681,10 +685,16 @@
      (let [[_ cache] (merge-internal low-node high-node root raf cache)
            ; root's :last now points to its *only* remaining child, so
            ; now the root *becomes* that node
-           root (get-node (:last root) raf cache)
-           root (assoc root
-                  :type :root-nonleaf)]
-       (cache-node root raf cache))))
+           [new-root cache] (get-node (:last root) raf cache)
+           _ (println "new root:" new-root)
+           new-root (assoc new-root
+                      :type     :root-nonleaf
+                      :offset   (:offset root)
+                      :altered? true)
+           ; remove low-node and high-node from cache
+           cache (apply dissoc cache
+                        (map :offset [low-node high-node]))]
+       (cache-node new-root raf cache))))
 
 (defn- merge-nodes
   "Recursively merges node."
