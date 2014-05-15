@@ -359,6 +359,83 @@
                                   :altered? true}))]
         (is (= cache expected-cache))))))
 
+(with-private-fns [b-plus-tree.core [cache-nodes
+                                     steal-prev-internal
+                                     steal-next-internal]]
+  (deftest steal-prev-internal-test
+    (testing "testing steal from previous internal node function"
+      (let [root {:type :root-nonleaf
+                  :key-ptrs (sorted-map "d" 200)
+                  :last 300
+                  :offset 100
+                  :altered? true}
+            low-internal {:type :internal
+                          :key-ptrs (sorted-map "b" 400
+                                                "c" 500)
+                          :last 600
+                          :offset 200
+                          :altered? true}
+            high-internal {:type :internal
+                           :key-ptrs (sorted-map "e" 700)
+                           :last 800
+                           :offset 300
+                           :altered? true}
+            a-leaf {:type :leaf
+                    :key-ptrs (sorted-map "a" 2000)
+                    :prev -1
+                    :next 500
+                    :offset 400}
+            b-leaf {:type :leaf
+                    :key-ptrs (sorted-map "b" 2100)
+                    :prev 400
+                    :next 600
+                    :offset 500}
+            c-leaf {:type :leaf
+                    :key-ptrs (sorted-map "c" 2200)
+                    :prev 500
+                    :next 700
+                    :offset 600}
+            d-leaf {:type :leaf
+                    :key-ptrs (sorted-map "d" 2300)
+                    :prev 600
+                    :next 800
+                    :offset 700}
+            e-leaf {:type :leaf
+                    :key-ptrs (sorted-map "e" 2400)
+                    :prev 700
+                    :next -1
+                    :offset 800}
+            initial-cache (cache-nodes
+                           [root low-internal high-internal
+                            a-leaf b-leaf c-leaf d-leaf e-leaf]
+                           nil
+                           {})
+            [_ cache] (steal-prev-internal high-internal low-internal root
+                                           nil initial-cache)
+            expected-cache (assoc initial-cache
+                             100 {:type :root-nonleaf
+                                  :key-ptrs (sorted-map "c" 200)
+                                  :last 300
+                                  :offset 100
+                                  :altered? true}
+                             200 {:type :internal
+                                  :key-ptrs (sorted-map "b" 400)
+                                  :last 500
+                                  :offset 200
+                                  :altered? true}
+                             300 {:type :internal
+                                  :key-ptrs (sorted-map "d" 600
+                                                        "e" 700)
+                                  :last 800
+                                  :offset 300
+                                  :altered? true})
+            _ (is (= cache expected-cache))
+            ; now try stealing back
+            {low-internal 200, high-internal 300, root 100} cache
+            [_ cache] (steal-next-internal low-internal high-internal root
+                                           nil cache)]
+        (is (= cache initial-cache))))))
+
 (deftest no-merge-test
   (testing "removing from B+ Tree without any merges"
     (binding [order 32]

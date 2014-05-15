@@ -126,19 +126,27 @@ fields."
   which is less-than key, or in the case of leaf-nodes, contains key's value"
   ([node] (map list (:keys node) (:children node))))
 
-(defn leaf-assoc
-  "Given a leaf node, returns that node with key and ptr inserted"
-  {:arglists '([leaf & keyptrs])}
-  ([{:keys [key-ptrs] :as leaf} & keyptrs]
-     (assoc leaf
+(defn node-assoc
+  "Given a node, returns that node with key and ptr inserted"
+  {:arglists '([node & keyptrs])}
+  ([{:keys [key-ptrs] :as node} & keyptrs]
+     (assoc node
        :key-ptrs (apply assoc key-ptrs keyptrs)
        :altered? true)))
 
 (defn node-dissoc
-  "Given a leaf node, returns that node with key removed."
+  "Given a node, returns that node with key removed."
   ([{:keys [key-ptrs] :as node} & keys]
      (assoc node
        :key-ptrs (apply dissoc key-ptrs keys)
+       :altered? true)))
+
+(defn node-rename-keys
+  "Given a node and a map of old keys to new keys, returns that node with
+  old keys replaced with new keys."
+  ([{:keys [key-ptrs] :as node} kmap]
+     (assoc node
+       :key-ptrs (clojure.set/rename-keys key-ptrs kmap)
        :altered? true)))
 
 (defn leaf-merge

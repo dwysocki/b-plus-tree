@@ -389,7 +389,7 @@
                                 raf
                                 cache)]
            ; record does not exist, insert at leaf
-           (let [leaf (b-plus-tree.nodes/leaf-assoc leaf key free)
+           (let [leaf (b-plus-tree.nodes/node-assoc leaf key free)
                  record {:type :record
                          :data val
                          :offset free
@@ -502,11 +502,26 @@
                ", actual: " (:offset n-node))))
        [prev-node next-node])))
 
-(defn- key-by-ptr
+(defn- ptr->key
   "Gets the key which is associated with ptr."
   ([key-ptrs ptr]
      (let [ptr-keys (clojure.set/map-invert key-ptrs)]
+       (println "ptr-keys:" ptr-keys)
+       (println "ptr:" ptr)
        (ptr-keys ptr))))
+
+(defn- ptr->prev-key
+  "Gets the key which is associated with the pointer before ptr."
+  ([{:keys [key-ptrs last] :as parent} ptr]
+     (let [ks (cons nil (keys key-ptrs))
+           ps (concat (vals key-ptrs) [last])
+           ; same as key-ptrs, but with all the pointers shifted left,
+           ; and :last added
+           ; {nil p_1, k_1 p_2, ..., k_{n-1} p_n}
+           kps (zipmap ks ps)]
+       ; now that everything has been shifted over by one, we can just use
+       ; ptr->key to find the prev-key
+       (ptr->key kps ptr))))
 
 (defn- steal-prev-leaf
   "Steals a key-ptr from prev-leaf into leaf.
@@ -524,7 +539,7 @@
            ; delete the last key from the previous leaf
            prev-leaf (b-plus-tree.nodes/node-dissoc prev-leaf stolen-key)
            ; add the stolen key to the leaf
-           leaf (b-plus-tree.nodes/leaf-assoc leaf stolen-key stolen-ptr)]
+           leaf (b-plus-tree.nodes/node-assoc leaf stolen-key stolen-ptr)]
        ; replace the key in the internal nodes with the stolen key
        (replace-keys {internal-key stolen-key} stack raf
                      (cache-nodes [leaf prev-leaf] raf cache)))))
@@ -542,7 +557,7 @@
            ; remove the stolen key/ptr from next-leaf
            next-leaf (b-plus-tree.nodes/node-dissoc next-leaf stolen-key)
            ; add the stolen key/ptr to leaf
-           leaf (b-plus-tree.nodes/leaf-assoc leaf stolen-key stolen-ptr)
+           leaf (b-plus-tree.nodes/node-assoc leaf stolen-key stolen-ptr)
            ; push the key which succeeds stolen-key up into the
            ; internal nodes
            first-key (-> leaf :key-ptrs first first)
@@ -566,7 +581,47 @@
 
 (defn- steal-prev-internal
   "Steal a key-ptr from node's previous sibling."
-  ([]))
+  ([node prev-node parent raf cache]
+     (let [; last key from prev gets pushed up to parent, associated
+           ; ptr becomes prev's new :last ptr
+           [pushed-key new-last] (-> prev-node :key-ptrs last)
+           ; :last ptr from prev becomes the first ptr in node
+           new-first (:last prev-node)
+           ; key which currently points to node in parent is pulled
+           ; down and inserted at the front of node
+           pulled-key (ptr->key (:key-ptrs parent) (:offset prev-node))
+           _ (println "pulled:" pulled-key)
+           ; replace key in parent which points to node with the key
+           ; being pulled from prev-node
+           parent (b-plus-tree.nodes/node-rename-keys parent {pulled-key
+                                                              pushed-key})
+           ; remove the pushed key from prev-node, and set the :last
+           ; ptr to the ptr that was associated with that key
+           prev-node (-> prev-node
+                         (b-plus-tree.nodes/node-dissoc pushed-key)
+                         (assoc :last new-last))
+           ; add the key pulled from parent to the front of node,
+           ; having it point to what prev-node's :last ptr pointed to
+           node (b-plus-tree.nodes/node-assoc node pulled-key new-first)
+           ; write altered nodes to cache
+           cache (cache-nodes [node prev-node parent] raf cache)]
+       [parent, cache])))
+
+(defn- steal-next-internal
+  "Steal a key-ptr from node's next sibling."
+  ([node next-node parent raf cache]
+     (let [
+           [pushed-key new-last] (-> next-node :key-ptrs first)
+           old-last (:last node)
+           pulled-key (ptr->key (:key-ptrs parent) (:offset node))
+           parent (b-plus-tree.nodes/node-rename-keys parent {pulled-key
+                                                              pushed-key})
+           next-node (b-plus-tree.nodes/node-dissoc next-node pushed-key)
+           node (-> node
+                    (b-plus-tree.nodes/node-assoc pulled-key old-last)
+                    (assoc :last new-last))
+           cache (cache-nodes [node next-node parent] raf cache)]
+       [parent, cache])))
 
 (defn- merge-prev-leaf
   "Merge leaf with the previous leaf. Returns [parent cache]"
@@ -646,7 +701,7 @@
   "Merges two sibling internal nodes. Returns [parent cache]"
   ([low-node high-node parent raf cache]
      (let [; steal a key from parent
-           stolen-key (key-by-ptr (:key-ptrs parent) (:offset low-node))
+           stolen-key (ptr->key (:key-ptrs parent) (:offset low-node))
            _ (println "stole key:" stolen-key)
            merged-key-ptrs (into (sorted-map)
                                  (concat (:key-ptrs low-node)
