@@ -1,11 +1,12 @@
 (ns b-plus-tree.remove-test
   (:require [clojure.java.io :as io]
-            [b-plus-tree core io])
+            [b-plus-tree core io nodes])
   (:use clojure.test
         b-plus-tree.test-utils))
 
 (def leaves
-  {1000 {:type :leaf
+  {; leftmost
+   1000 {:type :leaf
          :key-ptrs (sorted-map "a" 9000
                                "b" 9100
                                "bb" 10000
@@ -35,20 +36,63 @@
                                "hh" 10600
                                "hm" 10700)
          :prev 1200
+         :next 2100
+         :offset 1300}
+   ; middle
+   2100 {:type :leaf
+         :key-ptrs (sorted-map "i" 2110)
+         :prev 1300
+         :next 2200
+         :offset 2100},
+   2200 {:type :leaf
+         :key-ptrs (sorted-map "j" 2210)
+         :prev 2100
+         :next 2300
+         :offset 2200},
+   2300 {:type :leaf
+         :key-ptrs (sorted-map "k" 2310)
+         :prev 2200
+         :next 3100
+         :offset 2300}
+   ; rightmost
+   3100 {:type :leaf
+         :key-ptrs (sorted-map "l" 3110)
+         :prev 2300
+         :next 3200
+         :offset 3100},
+   3200 {:type :leaf
+         :key-ptrs (sorted-map "m" 3210)
+         :prev 3100
+         :next 3300
+         :offset 3200},
+   3300 {:type :leaf
+         :key-ptrs (sorted-map "n" 3310)
+         :prev 3200
          :next -1
-         :offset 1300}})
+         :offset 3300}})
 
 (def parents
-  {500 {:type :internal
+  {100 {:type :root-nonleaf
+        :key-ptrs (sorted-map "i" 500
+                              "l" 2000)
+        :last 3000
+        :offset 100},
+   500 {:type :internal
         :key-ptrs (sorted-map "c" 1000
                               "e" 1100
                               "g" 1200)
         :last 1300
-        :offset 500}
-   100 {:type :root-nonleaf
-        :key-ptrs (sorted-map "a" 200)
-        :last 500
-        :offset 100}})
+        :offset 500},
+   2000 {:type :internal
+         :key-ptrs (sorted-map "j" 2100
+                               "k" 2200)
+         :last 2300
+         :offset 2000},
+   3000 {:type :internal
+         :key-ptrs (sorted-map "m" 3100
+                               "n" 3200)
+         :last 3300
+         :offset 3000}})
 
 (def root
   (parents 100))
@@ -83,11 +127,78 @@
       (is (= (siblings (leaves 1300) parent nil cache)
              [(leaves 1200) nil])))))
 
-(with-private-fns [b-plus-tree.core [steal-merge]]
-  (deftest steal-test
-    (testing "testing steal function"
-      (println (steal-merge (leaves 1200) "zzzzz" stack nil header cache)))))
+(comment
+  (with-private-fns [b-plus-tree.core [steal-merge]]
+    (deftest steal-test
+      (testing "testing steal function"
+        (println (steal-merge (leaves 1200) "zzzzz" stack nil header cache))))))
 
+(with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
+                                     merge-internal]]
+  (deftest merge-test
+    (testing "testing merge functions"
+      (println "prev-merging 2nd leaf with 1st")
+      (println (select-keys (second
+                             (merge-prev-leaf (leaves 1100)
+                                              (leaves 1000)
+                                              "zzzz"
+                                              stack
+                                              nil
+                                              header
+                                              cache))
+                            [100 500 1000 1100 1200 1300]))
+      (println "prev-merging 3rd leaf with 2nd")
+      (println (select-keys (second
+                             (merge-prev-leaf (leaves 1200)
+                                              (leaves 1100)
+                                              "zzzz"
+                                              stack
+                                              nil
+                                              header
+                                              cache))
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 1st leaf with 2nd")
+      (println (select-keys (second
+                             (merge-next-leaf (leaves 1000)
+                                              (leaves 1100)
+                                              "zzzz"
+                                              stack
+                                              nil
+                                              header
+                                              cache))
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 2nd leaf with 3rd")
+      (println (select-keys (second
+                             (merge-next-leaf (leaves 1100)
+                                              (leaves 1200)
+                                              "zzzz"
+                                              stack
+                                              nil
+                                              header
+                                              cache))
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 2nd leaf with 3rd, after removing first key")
+      (println (select-keys (second
+                             (merge-next-leaf
+                              (b-plus-tree.nodes/node-dissoc (leaves 1100)
+                                                             "c")
+                              (leaves 1200)
+                              "c"
+                              stack
+                              nil
+                              header
+                              cache))
+                            [100 500 1000 1100 1200 1300]))
+      (println "merging 1st internal with 2nd")
+      (println (second
+                (merge-internal
+                 (parents 500)
+                 (parents 2000)
+                 root
+                 nil
+                 header
+                 cache)))
+      )))
 
 (deftest no-merge-test
   (testing "removing from B+ Tree without any merges"
@@ -102,11 +213,6 @@
               [header cache]
               (b-plus-tree.core/insert-all key-vals raf header)
 
-              _ (println "BEFORE:")
-              _
-              (b-plus-tree.core/print-leaf-keys raf header
-                                                :cache cache)
-              
               [remaining, missing, header, cache]
               (loop [key-vals  (into (sorted-map) key-vals)
                      header    header
@@ -119,15 +225,13 @@
                 (if-let [[k v] (first key-vals)]
                   (let [[remaining missing header cache]
                         (try
-                          (println "removing" k)
                           (let [[header cache]
                                 (b-plus-tree.core/delete k raf header
                                                          :cache cache)]
-                            (println "removed" k)
                             [remaining, missing, header, cache])
 
                           (catch UnsupportedOperationException e
-                            (println (.getMessage e))
+;                            (println (.getMessage e))
                             [(assoc remaining k v), missing, header, cache])
                           (catch clojure.lang.ExceptionInfo e
                             (println (.getMessage e))
@@ -149,23 +253,16 @@
                                         ; reached the end
                   [remaining, missing, header, cache]))]
 
-          (println "AFTER:")
-          (b-plus-tree.core/print-leaf-keys raf header
-                                            :cache cache)
-
-          (is (b-plus-tree.core/map-equals? remaining raf header
+           (is (b-plus-tree.core/map-equals? remaining raf header
                                             :cache cache))
           
           (b-plus-tree.io/write-cache cache raf)
           (is (b-plus-tree.core/map-equals? remaining raf header))
 
-          (println "finding problem keys")
           (doseq [k missing]
             (let [[v _] (b-plus-tree.core/find-val k raf header
                                                    :cache cache)]
               (if v
-                (println "Found" v)
-                (println "Could not find" v))))
-
-          (println "size" (:count header))))
+                (println "Found missing key" v)
+                (println "Could not find missing key" v))))))
       (delete-file))))

@@ -134,12 +134,26 @@ fields."
        :key-ptrs (apply assoc key-ptrs keyptrs)
        :altered? true)))
 
-(defn leaf-dissoc
+(defn node-dissoc
   "Given a leaf node, returns that node with key removed."
-  ([{:keys [key-ptrs] :as leaf} & keys]
-     (assoc leaf
+  ([{:keys [key-ptrs] :as node} & keys]
+     (assoc node
        :key-ptrs (apply dissoc key-ptrs keys)
        :altered? true)))
+
+(defn leaf-merge
+  "Given two leaf nodes, returns the to-leaf with from-leaf's key-ptrs
+  merged into its key-ptrs.
+  The keyword prev-next determines whether to take from-leaf's :prev or :next,
+  and put it in to-leaf. Any keyword other than :prev or :next will cause
+  undesirable behavior."
+  ([to from prev-next]
+     (let [key-ptrs (into (sorted-map) (merge (:key-ptrs to)
+                                              (:key-ptrs from)))]
+       (assoc to
+         :key-ptrs key-ptrs
+         prev-next (prev-next from)
+         :altered? true))))
 
 (defn count-children
   "Returns the number of children node has"
