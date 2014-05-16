@@ -145,7 +145,7 @@
     {:keys [cache]
      :or {cache {}}}]
      (if-not (or (zero? cnt)
-                   (> (count key) size))
+                 (> (count key) size))
        (let [[root cache] (get-node root-ptr raf cache)
              [record stack cache]
              (find-type-stack key #{:record} root [] raf
@@ -1049,6 +1049,110 @@
                         (cons next-node (lazy-seq (step next-node))))))]
          (cons first-node (lazy-seq (step first-node)))))))
 
+(defn leaves-from
+  "Returns a seq of all the leaf nodes in the B+ Tree starting from the
+  node that would contain key if it is in the tree."
+  ([key raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (when (pos? (:count header))
+       (let [[root cache] (get-node (:root header) raf cache)
+             [_ stack cache] (find-stack key raf header :cache cache)
+             first-node (peek stack)
+             step (fn step [prev-node]
+                    (let [[next-node _] (get-node (:next prev-node) raf cache)]
+                      (when next-node
+                        (cons next-node (lazy-seq (step next-node))))))]
+         (cons first-node (lazy-seq (step first-node)))))))
+
+(defn key-seq-from
+  "Returns a seq of all the keys in the B+ Tree starting from key"
+  ([key raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [leaf-seq (leaves-from key raf header
+                                 :cache cache)
+           ks (-> leaf-seq first :key-ptrs keys)
+           leaf-seq (rest leaf-seq)
+           step (fn step [ks leaf-seq]
+                  (cond
+                   ; still have key-ptrs from this node
+                   (seq ks)
+                   (let [k (first ks)]
+                     (cons k (lazy-seq (step (rest ks)
+                                             leaf-seq))))
+
+                   ; still have leaves to go
+                   (seq leaf-seq)
+                   (step (-> leaf-seq first :key-ptrs keys)
+                         (rest leaf-seq))))]
+       (lazy-seq (step ks leaf-seq)))))
+
+(defn key-subset
+  "Returns a seq of all the keys in the B+ Tree from start (inclusive) to
+  end (exclusive)."
+  ([start end raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [key-seq (key-seq-from start raf header
+                                 :cache cache)]
+       (->> key-seq
+            (drop-while #(pos? (compare start %)))
+            (take-while #(neg? (compare % end)))))))
+
+(defn key-starts-with
+  "Returns a seq of all the keys in the B+ Tree which start with substring."
+  ([substring raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (let [key-seq (key-seq-from substring raf header
+                                 :cache cache)]
+       (filter #(.startsWith % substring) key-seq))))
+
+(defn print-starts-with-remove
+  "Prints all of the keys in the B+ Tree which start with substring, and then
+  removes them, returning the header and cache."
+  ([substring raf header
+    & {:keys [cache]
+       :or {cache {}}}]
+     (if-let [key-seq (key-starts-with substring raf header
+                                       :cache cache)]
+       (do
+         (println key-seq)
+         (delete-all key-seq raf header
+                     :cache cache))
+       (do
+         (println "String not found.")
+         [header cache]))))
+
+(comment
+  (defn key-subset
+    "Returns a seq of all the keys in the B+ Tree between start (inclusive)
+  and end (exclusive)."
+    ([start end raf header
+      & {:keys [cache]
+         :or {cache {}}}]
+       (when (pos? (:count header))
+         (if (= start end)
+           (when (first (find-val start raf header :cache cache))
+             start)
+           (let [[root cache] (get-node (:root header) raf cache)
+                 [_ stack cache] (find-stack start raf header cache)
+                 [_ leaf] (b-plus-tree.seq/pop-stack stack)
+                 ks  (->> leaf :key-ptrs keys
+                          (drop-while #(neg? (compare % start))))
+                 nxt (:next leaf)
+                 step (fn step [ks nxt]
+                        (when-let [k (first ks)]
+                          (when (neg? (compare k end))
+                            (if-let [ks (next keys)]
+                              (cons k )))))]
+             )))
+       
+       )))
+
+
+
 (defn keyval-seq
   "Returns a seq of all the key-value pairs in the B+ Tree."
   ([raf header
@@ -1072,6 +1176,8 @@
                    (step (-> leaf-seq first :key-ptrs)
                          (rest leaf-seq))))]
        (lazy-seq (step key-ptrs leaf-seq)))))
+
+
 
 (defn print-leaf-keys
   "Prints the keys of all the leaf nodes in order, separating each node

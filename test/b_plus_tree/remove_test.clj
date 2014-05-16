@@ -513,7 +513,7 @@
         (let [header (get-header raf)
 
               key-vals
-              (numbered-strings 1000)
+              (numbered-strings 100)
               
               half (-> key-vals count (* 3/4))
 
@@ -523,6 +523,14 @@
               [header cache]
               (b-plus-tree.core/insert-all key-vals raf header)
 
+              [header cache]
+              (b-plus-tree.core/print-starts-with-remove "1" raf header
+                                                         :cache cache)
+
+              [header cache]
+              (b-plus-tree.core/print-starts-with-remove "1" raf header
+                                                         :cache cache)
+              _ (System/exit 0)
               _
               (is (b-plus-tree.core/map-equals? key-vals raf header
                                                 :cache cache))
