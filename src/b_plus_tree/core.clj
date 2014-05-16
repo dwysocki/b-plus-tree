@@ -265,7 +265,7 @@
        [header, cache, [mid-k right-offset]])))
 
 (defn- split-leaf
-  "Splits a :leaf node. Do not attempt to split another type of node.
+  "Splits a :leaf node.
   Returns [[k p] header cache], where k is the key to add to the parent,
   and p is the pointer of the new (right) node."
   ([{:keys [key-ptrs next prev offset]
@@ -453,11 +453,9 @@
                     :altered? true)
                   ; keys were not replaced
                   node)
-;           _ (println "altered?" (empty? replaced-keys))
            ; remove entries from key-replacements which have been used
            key-replacements (apply dissoc key-replacements
                                    replaced-keys)
-;           _ (println "replacements remaining:" key-replacements)
 
            cache (cache-node node raf cache)]
        (cond
@@ -493,22 +491,7 @@
                                                   (= mid node-offset))
                                                 triplets))
            [prev-node cache] (get-node prev-ptr raf cache)
-           [next-node cache] (get-node next-ptr raf cache)
-           ;; [p-node cache] (get-node (:prev node) raf cache)
-           ;; [n-node cache] (get-node (:next node) raf cache)
-           ]
-       (comment
-         (println
-          (str "PTRS:\n"
-               triplets
-               "\n"
-               "EQ?\n"
-               "PREV:: "
-               "found: "    (:offset prev-node)
-               ", actual: " (:offset p-node) "\n"
-               "NEXT:: "
-               "found: "    (:offset next-node)
-               ", actual: " (:offset n-node))))
+           [next-node cache] (get-node next-ptr raf cache)]
        [prev-node next-node])))
 
 (defn- ptr->key
@@ -535,7 +518,6 @@
   Stolen key will become leaf's first key, so that key must be replaced
   in the internal nodes with the stolen key."
   ([leaf deleted-key prev-leaf stack raf cache]
-     (println "STEAL PREV LEAF")
      (let [; key currently at the front of leaf's key-ptrs
            first-key (-> leaf :key-ptrs first first)
            ; either the deleted key, or the first key has a copy in
@@ -558,7 +540,6 @@
   in the internal nodes with the new first key.
   Returns [parent, cache]"
   ([leaf deleted-key next-leaf stack raf cache]
-     (println "STEAL NEXT LEAF")
      (let [; get the first key and ptr from the next leaf, and get
            ; the key that will become the first key so you can push it
            ; up through the internal nodes
@@ -592,7 +573,6 @@
 (defn- steal-prev-internal
   "Steal a key-ptr from node's previous sibling."
   ([node prev-node parent raf cache]
-     (println "STEAL PREV INTERNAL")
      (let [; last key from prev gets pushed up to parent, associated
            ; ptr becomes prev's new :last ptr
            [pushed-key new-last] (-> prev-node :key-ptrs last)
@@ -620,9 +600,7 @@
 (defn- steal-next-internal
   "Steal a key-ptr from node's next sibling."
   ([node next-node parent raf cache]
-     (println "STEAL NEXT INTERNAL")
-     (let [
-           [pushed-key new-last] (-> next-node :key-ptrs first)
+     (let [[pushed-key new-last] (-> next-node :key-ptrs first)
            old-last (:last node)
            pulled-key (ptr->key (:key-ptrs parent) (:offset node))
            parent (b-plus-tree.nodes/node-rename-keys parent {pulled-key
@@ -635,9 +613,12 @@
        [parent, cache])))
 
 (defn- merge-prev-leaf
-  "Merge leaf with the previous leaf. Returns [parent cache]"
+  "Merge leaf with the previous leaf. Returns cache"
   ([leaf prev-leaf deleted-key stack raf cache]
-     (println "MERGE PREV LEAF")
+     (comment
+       (println "PREV"
+                (:prev prev-leaf) "<-[" (:offset prev-leaf) "]<->["
+                (:offset leaf) "]->" (:next leaf)))
      (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
            first-key (-> leaf :key-ptrs first first)
            ; the key to remove from the parent, which is either the
@@ -657,7 +638,8 @@
        (if pprev-leaf
          ; leaf before prev-leaf exists, fix it
          (let [pprev-leaf (assoc pprev-leaf
-                            :next (:offset leaf))]
+                            :next (:offset leaf)
+                            :altered? true)]
            (cache-node pprev-leaf raf cache))
          ; prev-leaf was the leftmost leaf, so nothing else needs to be done
          cache))))
@@ -665,7 +647,6 @@
 (defn- merge-next-leaf
   "Merge leaf with the next leaf. Returns [parent cache]"
   ([leaf next-leaf deleted-key stack raf cache]
-     (println "MERGE NEXT LEAF")
      (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
            ; must delete the first key from next-leaf from the parent
            parent-key (-> next-leaf :key-ptrs first first)
@@ -682,7 +663,8 @@
            [prev-leaf cache] (get-node (:prev leaf) raf cache)
            cache (if-let [prev-leaf (and prev-leaf
                                          (assoc prev-leaf
-                                           :next (:offset next-leaf)))]
+                                           :next (:offset next-leaf)
+                                           :altered? true))]
                    ; write altered node to cache
                    (cache-node prev-leaf raf cache)
                    ; no such node exists, leave cache unchanged
@@ -706,23 +688,18 @@
 (defn- merge-internal
   "Merges two sibling internal nodes. Returns [parent cache]"
   ([low-node high-node parent raf cache]
-     (println "MERGE INTERNAL")
      (let [; steal a key from parent
            stolen-key (ptr->key (:key-ptrs parent) (:offset low-node))
-;           _ (println "stole key:" stolen-key)
            merged-key-ptrs (into (sorted-map)
                                  (concat (:key-ptrs low-node)
                                          [[stolen-key (:last low-node)]]
                                          (:key-ptrs high-node)))
-;           _ (println "new ptrs" merged-key-ptrs)
            merged-node {:type :internal
                         :key-ptrs merged-key-ptrs
                         :last (:last high-node)
                         :offset (:offset high-node)
                         :altered? true}
-;           _ (println "parent before" parent)
            parent (b-plus-tree.nodes/node-dissoc parent stolen-key)
-;           _ (println "parent after" parent)
            ; cache altered nodes
            cache (cache-nodes [merged-node, parent] raf cache)
            ; remove low-node from cache
@@ -732,7 +709,6 @@
 (defn- merge-root-leaf
   "Merges the last two leaf nodes, making a root-leaf. Returns cache."
   ([low-leaf high-leaf root raf cache]
-     (println "MERGE ROOT LEAF")
      (let [key-ptrs (apply merge (map :key-ptrs [low-leaf high-leaf]))
            root-leaf {:type     :root-leaf
                       :key-ptrs key-ptrs
@@ -745,12 +721,10 @@
 (defn- merge-root-internal
   "Merges two internal nodes into the root. Returns cache."
   ([low-node high-node root raf cache]
-     (println "MERGE ROOT INTERNAL")
      (let [[_ cache] (merge-internal low-node high-node root raf cache)
            ; root's :last now points to its *only* remaining child, so
            ; now the root *becomes* that node
            [new-root cache] (get-node (:last root) raf cache)
-;           _ (println "new root:" new-root)
            new-root (assoc new-root
                       :type     :root-nonleaf
                       :offset   (:offset root)
@@ -774,7 +748,7 @@
        (cond
         ; merge with root
         (and (= (:type parent) :root-nonleaf)
-             (b-plus-tree.nodes/underfull? parent order))
+             (not (b-plus-tree.nodes/shrinkable? parent order)))
         (merge-root-internal low-node high-node parent raf cache)
         ; merge with previous node
         prev-node
@@ -793,8 +767,6 @@
     {:keys [order]
      :as header}
     cache]
-;     (println "PPREV" prev-leaf)
-;     (println "NNEXT" next-leaf)
      (let [parent (peek stack)
            ; in case we are merging with the root, there are actually
            ; only two leaves left, and we need to know which is low
@@ -806,7 +778,7 @@
        (cond
         ; merging with root
         (and (= (:type parent) :root-nonleaf)
-             (b-plus-tree.nodes/underfull? parent order))
+             (not (b-plus-tree.nodes/shrinkable? parent order)))
         (merge-root-leaf low-leaf high-leaf parent raf cache)
         ; merge with previous leaf
         prev-leaf
@@ -825,9 +797,7 @@
     {:keys [order]
      :as header}
     cache]
-;     (println "PARENTE" parent)
      (let [[prev-node next-node] (siblings node parent raf cache)]
-;       (println "INTERNAL SIBLINGS" prev-node next-node)
        (cond
         ; prev-node exists and can be stolen from
         (and prev-node (b-plus-tree.nodes/shrinkable? prev-node order))
@@ -866,8 +836,6 @@
     {:keys [order]
      :as header}
     cache]
-;     (println "STACK")
-;     (doall (map println stack))
      (let [cache (steal-merge-leaves leaf deleted-key stack raf header cache)
            [stack parent] (b-plus-tree.seq/pop-stack stack)
            [parent cache] (refresh-node parent raf cache)]
@@ -880,14 +848,11 @@
                   (b-plus-tree.nodes/underfull? node order))
            (let [; get parent from stack
                  [stack parent] (b-plus-tree.seq/pop-stack stack)
-                 _ (println "PTYPE1" (:type parent))
                  ; refresh parent in case it's been altered
                  [parent cache] (refresh-node parent raf cache)
-                 _ (println "PTYPE2" (:type parent))
                  ; steal/merge
                  [parent cache] (steal-merge-internals node parent raf
                                                        header cache)]
-             (println "PTYPE3" (:type parent))
              ; repeat for parent
              (recur parent stack cache))
            ; finished merging and stealing, return the cache
@@ -920,7 +885,6 @@
              [stack leaf] (b-plus-tree.seq/pop-stack stack)
              ; unpack leaf
              {:keys [type key-ptrs]} leaf]
-;         (println "before:" leaf)
          (if (key-ptrs key)
            ; leaf contains key, remove it
            (let [header (assoc header
@@ -935,7 +899,6 @@
                       (not= key (-> key-ptrs first first)))
                    ; key is not repeated in internal nodes
                    (let [leaf (b-plus-tree.nodes/node-dissoc leaf key)]
-;                     (println "after:" leaf)
                      (if (b-plus-tree.nodes/underfull? leaf order)
                        ; leaf is underfull, steal or merge
                        (steal-merge leaf key stack raf header cache)
@@ -967,12 +930,11 @@
      
      
      (if-let [k (first ks)]
-       (let [_ (println "deleting" k)
-;             _ (print-leaf-keys raf header :cache cache)
-             [header cache] (b-plus-tree.core/delete k raf
+       (let [[header cache] (b-plus-tree.core/delete k raf
                                                      header
                                                      :cache cache)]
-         (recur (next ks) raf header {:cache cache}))
+         (b-plus-tree.io/write-cache cache raf)
+         (recur (next ks) raf header {}))
        [header cache])))
 
 (defn map-subset?
@@ -994,6 +956,25 @@
      (when (= size (count m))
        (map-subset? m raf header
                     :cache cache))))
+
+(defn depth
+  "Returns the number of levels of children in the B+ Tree.
+  The root is at depth 0."
+  ([raf
+    {:keys [count root]
+     :as header}
+    & {:keys [cache]
+       :or {cache {}}}]
+     (if (pos? count)
+       (let [[root cache] (get-node root raf cache)]
+         (loop [n    0
+                node root
+                cache cache]
+           (if (b-plus-tree.nodes/leaf? node)
+             n
+             (let [[node cache] (get-node (:last node) raf cache)]
+               (recur (inc n) node cache)))))
+       0)))
 
 (defn- lowest-leaf
   "Returns the lowest leaf in sorted order starting at node."
@@ -1059,13 +1040,14 @@
   ([raf header
     & {:keys [cache]
        :or {cache {}}}]
-     (let [[root cache] (get-node (:root header) raf cache)
-           first-node (lowest-leaf root raf header cache)
-           step (fn step [prev-node]
-                  (let [[next-node _] (get-node (:next prev-node) raf cache)]
-                    (when next-node
-                      (cons next-node (lazy-seq (step next-node))))))]
-       (cons first-node (lazy-seq (step first-node))))))
+     (when (pos? (:count header))
+       (let [[root cache] (get-node (:root header) raf cache)
+             first-node (lowest-leaf root raf header cache)
+             step (fn step [prev-node]
+                    (let [[next-node _] (get-node (:next prev-node) raf cache)]
+                      (when next-node
+                        (cons next-node (lazy-seq (step next-node))))))]
+         (cons first-node (lazy-seq (step first-node)))))))
 
 (defn keyval-seq
   "Returns a seq of all the key-value pairs in the B+ Tree."
@@ -1099,11 +1081,8 @@
        :or {cache {}}}]
      (let [leaf-seq (leaf-seq raf header
                               :cache cache)]
-       (println "hwaaa?")
-       (doall (map (comp println keys :key-ptrs) leaf-seq))
-       ;; (doseq [leaf leaf-seq]
-       ;;   (println (-> leaf :key-ptrs keys)))
-       )))
+       (when (seq leaf-seq)
+         (doall (map (comp println keys :key-ptrs) leaf-seq))))))
 
 (defn traverse
   "Returns a lazy sequence of the key value pairs contained in the B+ Tree,

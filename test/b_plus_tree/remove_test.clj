@@ -134,65 +134,65 @@
         (println (steal-merge (leaves 1200) "zzzzz" stack nil header cache))))))
 
 
-(comment
-  (with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
-                                       merge-internal cache-node]]
-    (deftest merge-test
-      (testing "testing merge functions"
-        (println "prev-merging 2nd leaf with 1st")
-        (println (select-keys (merge-prev-leaf (leaves 1100)
-                                               (leaves 1000)
-                                               "zzzz"
-                                               stack
-                                               nil
-                                               cache)
-                              [100 500 1000 1100 1200 1300]))
-        (println "prev-merging 3rd leaf with 2nd")
-        (println (select-keys (merge-prev-leaf (leaves 1200)
-                                               (leaves 1100)
-                                               "zzzz"
-                                               stack
-                                               nil
-                                               cache)
-                              [100 500 1000 1100 1200 1300]))
-        (println "next-merging 1st leaf with 2nd")
-        (println (select-keys (merge-next-leaf (leaves 1000)
-                                               (leaves 1100)
-                                               "zzzz"
-                                               stack
-                                               nil
-                                               cache)
-                              [100 500 1000 1100 1200 1300]))
-        (println "next-merging 2nd leaf with 3rd")
-        (println (select-keys (merge-next-leaf (leaves 1100)
-                                               (leaves 1200)
-                                               "zzzz"
-                                               stack
-                                               nil
-                                               cache)
-                              [100 500 1000 1100 1200 1300]))
-        (println "next-merging 2nd leaf with 3rd, after removing first key")
-        (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
-              cache (cache-node node nil cache)]
-          (try
-            (println (select-keys (merge-next-leaf
-                                   node
-                                   (leaves 1200)
-                                   "c"
-                                   stack
-                                   nil
-                                   cache)
-                                  [100 500 1000 1100 1200 1300]))
-            (catch clojure.lang.ExceptionInfo e
-              (println "EEEEEEEEE" (ex-data e)))))
-        
-        (println "merging 1st internal with 2nd")
-        (println (second (merge-internal
-                          (parent-nodes 500)
-                          (parent-nodes 2000)
-                          root
-                          nil
-                          cache)))))))
+
+(with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
+                                     merge-internal cache-node]]
+  (deftest merge-test
+    (testing "testing merge functions"
+      (println "prev-merging 2nd leaf with 1st")
+      (println (select-keys (merge-prev-leaf (leaves 1100)
+                                             (leaves 1000)
+                                             "zzzz"
+                                             stack
+                                             nil
+                                             cache)
+                            [100 500 1000 1100 1200 1300]))
+      (println "prev-merging 3rd leaf with 2nd")
+      (println (select-keys (merge-prev-leaf (leaves 1200)
+                                             (leaves 1100)
+                                             "zzzz"
+                                             stack
+                                             nil
+                                             cache)
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 1st leaf with 2nd")
+      (println (select-keys (merge-next-leaf (leaves 1000)
+                                             (leaves 1100)
+                                             "zzzz"
+                                             stack
+                                             nil
+                                             cache)
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 2nd leaf with 3rd")
+      (println (select-keys (merge-next-leaf (leaves 1100)
+                                             (leaves 1200)
+                                             "zzzz"
+                                             stack
+                                             nil
+                                             cache)
+                            [100 500 1000 1100 1200 1300]))
+      (println "next-merging 2nd leaf with 3rd, after removing first key")
+      (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
+            cache (cache-node node nil cache)]
+        (try
+          (println (select-keys (merge-next-leaf
+                                 node
+                                 (leaves 1200)
+                                 "c"
+                                 stack
+                                 nil
+                                 cache)
+                                [100 500 1000 1100 1200 1300]))
+          (catch clojure.lang.ExceptionInfo e
+            (println "EEEEEEEEE" (ex-data e)))))
+      
+      (println "merging 1st internal with 2nd")
+      (println (second (merge-internal
+                        (parent-nodes 500)
+                        (parent-nodes 2000)
+                        root
+                        nil
+                        cache))))))
 
 (comment
   (with-private-fns [b-plus-tree.core [cache-nodes merge-internal]]
@@ -503,6 +503,7 @@
                   (println "Could not find missing key" v))))))
         (delete-file)))))
 
+
 (deftest delete-test
   (testing "testing delete function"
     (binding [order 32]
@@ -512,42 +513,10 @@
         (let [header (get-header raf)
 
               key-vals
-              {"a" "aa"
-               "b" "bb"
-               "c" "cc"
-               "d" "dd"
-               "e" "ee"
-               "f" "ff"
-               "g" "gg"
-               "h" "hh"
-               "i" "ii"
-               "j" "jj"
-               "k" "kk"
-               "l" "ll"
-               "m" "mm"
-               "n" "nn"
-               "o" "oo"
-               "p" "pp"}
-
-              key-vals
-              (numbered-strings 150)
+              (numbered-strings 1000)
               
-              ;; {"apple" "red-green",
-              ;;  "orange" "orange",
-              ;;  "banana" "yellow",
-              ;;  "cucumber" "green",
-              ;;  "pear" "yellow-green"
-              ;;  "grape" "purple"
-              ;;  "coconut" "brown-white"
-              ;;  "chocolate" "brown"
-              ;;  "blackberry" "black"
-              ;;  "blueberry" "blue"
-              ;;  "strawberry" "red"}
+              half (-> key-vals count (* 3/4))
 
-              half (-> key-vals count (* 4/5))
-
-              _ (println "HALF:" half)
-              
               half-keys (take half
                               (shuffle (keys key-vals)))
 
@@ -558,8 +527,6 @@
               (is (b-plus-tree.core/map-equals? key-vals raf header
                                                 :cache cache))
 
-              ;; _ (b-plus-tree.core/print-leaf-keys raf header
-              ;;                                     :cache cache)
               [header cache]
               (b-plus-tree.core/delete-all half-keys raf header
                                            :cache cache)
@@ -567,16 +534,43 @@
               remaining (apply dissoc key-vals half-keys)
               ]
           (println "size:" (:count header))
+          (println "depth:" (b-plus-tree.core/depth raf header))
           (println "root:" (cache (:root header)))
           
-          (is (b-plus-tree.core/map-equals? remaining raf header
-                                            :cache cache))
-          (is (not (b-plus-tree.core/map-equals? (into (sorted-map)
-                                                       (nnext remaining))
-                                                 raf header
-                                                 :cache cache)))
-;          (println cache)
+          (is (b-plus-tree.core/map-equals? remaining raf header))
+          
           (println "now let's see what we've got")
-          (comment
-            (b-plus-tree.core/print-leaf-keys raf header
-                                              :cache cache)))))))
+          (b-plus-tree.core/print-leaf-keys raf header))))))
+
+(comment
+  (deftest thorough-delete-test
+    (testing "deleting 1 items at a time and checking map equality"
+      (binding [order 32]
+        (delete-file)
+        (new-tree)
+        (with-open [raf (get-raf)]
+          (let [header (get-header raf)
+
+                key-vals
+                (unsorted-numbered-strings 1000)
+                
+                [header cache]
+                (b-plus-tree.core/insert-all key-vals raf header)
+
+                _
+                (is (b-plus-tree.core/map-equals? key-vals raf header
+                                                  :cache cache))]
+            (b-plus-tree.io/write-cache cache raf)
+            (loop [header   header
+                   cache    cache
+                   key-vals key-vals
+                   n        0]
+              (when-let [[k v] (first key-vals)]
+                (let [[header cache] (b-plus-tree.core/delete k raf header
+                                                              )
+                      key-vals (dissoc key-vals k)]
+                  (b-plus-tree.io/write-cache cache raf)
+                                        ;                (println n)
+                  (is (b-plus-tree.core/map-equals? key-vals raf header
+                                                    ))
+                  (recur header cache key-vals (inc n)))))))))))
