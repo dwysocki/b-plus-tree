@@ -1115,8 +1115,8 @@
   ([substring raf header
     & {:keys [cache]
        :or {cache {}}}]
-     (if-let [key-seq (key-starts-with substring raf header
-                                       :cache cache)]
+     (if-let [key-seq (seq (key-starts-with substring raf header
+                                            :cache cache))]
        (do
          (println key-seq)
          (delete-all key-seq raf header
