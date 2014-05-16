@@ -133,372 +133,450 @@
       (testing "testing steal function"
         (println (steal-merge (leaves 1200) "zzzzz" stack nil header cache))))))
 
-(with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
-                                     merge-internal cache-node]]
-  (deftest merge-test
-    (testing "testing merge functions"
-      (println "prev-merging 2nd leaf with 1st")
-      (println (select-keys (second
-                             (merge-prev-leaf (leaves 1100)
-                                              (leaves 1000)
-                                              "zzzz"
-                                              stack
-                                              nil
-                                              cache))
-                            [100 500 1000 1100 1200 1300]))
-      (println "prev-merging 3rd leaf with 2nd")
-      (println (select-keys (second
-                             (merge-prev-leaf (leaves 1200)
-                                              (leaves 1100)
-                                              "zzzz"
-                                              stack
-                                              nil
-                                              cache))
-                            [100 500 1000 1100 1200 1300]))
-      (println "next-merging 1st leaf with 2nd")
-      (println (select-keys (second
-                             (merge-next-leaf (leaves 1000)
-                                              (leaves 1100)
-                                              "zzzz"
-                                              stack
-                                              nil
-                                              cache))
-                            [100 500 1000 1100 1200 1300]))
-      (println "next-merging 2nd leaf with 3rd")
-      (println (select-keys (second
-                             (merge-next-leaf (leaves 1100)
-                                              (leaves 1200)
-                                              "zzzz"
-                                              stack
-                                              nil
-                                              cache))
-                            [100 500 1000 1100 1200 1300]))
-      (println "next-merging 2nd leaf with 3rd, after removing first key")
-      (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
-            cache (cache-node node nil cache)]
-        (println "NOOODEEEE::::" node)
-        (try
-          (println (select-keys (second
-                                 (merge-next-leaf
-                                  node
-                                  (leaves 1200)
-                                  "c"
-                                  stack
-                                  nil
-                                  cache))
-                                [100 500 1000 1100 1200 1300]))
-          (catch clojure.lang.ExceptionInfo e
-            (println "EEEEEEEEE" (ex-data e)))))
-      
-      (println "merging 1st internal with 2nd")
-      (println (second
-                (merge-internal
-                 (parent-nodes 500)
-                 (parent-nodes 2000)
-                 root
-                 nil
-                 cache))))))
 
-(with-private-fns [b-plus-tree.core [cache-nodes merge-internal]]
-  (deftest merge-internal-test
-    (testing "merging internal nodes"
-      (let [root {:type :root-nonleaf
-                  :key-ptrs (sorted-map "c" 200
-                                        "e" 300)
-                  :last 400
-                  :offset 100}
-            low-internal {:type :internal
-                          :key-ptrs (sorted-map "b" 500)
-                          :last 600
-                          :offset 200}
-            mid-internal {:type :internal
-                          :key-ptrs (sorted-map "d" 700)
-                          :last 800
-                          :offset 300}
-            high-internal {:type :internal
-                           :key-ptrs (sorted-map "d" 900)
-                           :last 1000
-                           :offset 400}
-            a-leaf {:type :leaf
-                    :key-ptrs (sorted-map "a" 2000)
-                    :prev -1
-                    :next 600
-                    :offset 500}
-            b-leaf {:type :leaf
-                    :key-ptrs (sorted-map "b" 2100)
-                    :prev 500
-                    :next 700
-                    :offset 600}
-            c-leaf {:type :leaf
-                    :key-ptrs (sorted-map "c" 2200)
-                    :prev 600
-                    :next 800
-                    :offset 700}
-            d-leaf {:type :leaf
-                    :key-ptrs (sorted-map "d" 2300)
-                    :prev 700
-                    :next 900
-                    :offset 800}
-            e-leaf {:type :leaf
-                    :key-ptrs (sorted-map "e" 2400)
-                    :prev 800
-                    :next 1000
-                    :offset 900}
-            f-leaf {:type :leaf
-                    :key-ptrs (sorted-map "f" 2500)
-                    :prev 900
-                    :next -1
-                    :offset 1000}
-            initial-cache (cache-nodes
-                           [root low-internal mid-internal high-internal
-                            a-leaf b-leaf c-leaf d-leaf e-leaf f-leaf]
-                           nil
-                           {})
-            [_ cache] (merge-internal low-internal mid-internal root
-                                      nil initial-cache)
-            expected-cache (-> initial-cache
-                               (dissoc 200)
-                               (assoc 300
-                                 {:type :internal
-                                  :key-ptrs (sorted-map "b" 500
-                                                        "c" 600
-                                                        "d" 700)
-                                  :last 800
-                                  :offset 300
-                                  :altered? true})
-                               (assoc 100
-                                 {:type :root-nonleaf
-                                  :key-ptrs (sorted-map "e" 300)
-                                  :last 400
-                                  :offset 100
-                                  :altered? true}))]
-        (is (= cache expected-cache))))))
+(comment
+  (with-private-fns [b-plus-tree.core [merge-prev-leaf merge-next-leaf
+                                       merge-internal cache-node]]
+    (deftest merge-test
+      (testing "testing merge functions"
+        (println "prev-merging 2nd leaf with 1st")
+        (println (select-keys (merge-prev-leaf (leaves 1100)
+                                               (leaves 1000)
+                                               "zzzz"
+                                               stack
+                                               nil
+                                               cache)
+                              [100 500 1000 1100 1200 1300]))
+        (println "prev-merging 3rd leaf with 2nd")
+        (println (select-keys (merge-prev-leaf (leaves 1200)
+                                               (leaves 1100)
+                                               "zzzz"
+                                               stack
+                                               nil
+                                               cache)
+                              [100 500 1000 1100 1200 1300]))
+        (println "next-merging 1st leaf with 2nd")
+        (println (select-keys (merge-next-leaf (leaves 1000)
+                                               (leaves 1100)
+                                               "zzzz"
+                                               stack
+                                               nil
+                                               cache)
+                              [100 500 1000 1100 1200 1300]))
+        (println "next-merging 2nd leaf with 3rd")
+        (println (select-keys (merge-next-leaf (leaves 1100)
+                                               (leaves 1200)
+                                               "zzzz"
+                                               stack
+                                               nil
+                                               cache)
+                              [100 500 1000 1100 1200 1300]))
+        (println "next-merging 2nd leaf with 3rd, after removing first key")
+        (let [node (b-plus-tree.nodes/node-dissoc (leaves 1100) "c")
+              cache (cache-node node nil cache)]
+          (try
+            (println (select-keys (merge-next-leaf
+                                   node
+                                   (leaves 1200)
+                                   "c"
+                                   stack
+                                   nil
+                                   cache)
+                                  [100 500 1000 1100 1200 1300]))
+            (catch clojure.lang.ExceptionInfo e
+              (println "EEEEEEEEE" (ex-data e)))))
+        
+        (println "merging 1st internal with 2nd")
+        (println (second (merge-internal
+                          (parent-nodes 500)
+                          (parent-nodes 2000)
+                          root
+                          nil
+                          cache)))))))
 
-(with-private-fns [b-plus-tree.core [cache-nodes merge-root-leaf]]
-  (deftest merge-root-leaf-test
-    (testing "merging root with leaves"
-      (let [low-leaf  {:type :leaf
-                       :key-ptrs (sorted-map "a" 1000
-                                             "b" 1100)
-                       :prev -1
-                       :next 300
-                       :offset 200},
-            high-leaf {:type :leaf
-                       :key-ptrs (sorted-map "c" 1200
-                                             "d" 1300)
-                       :prev 200
-                       :next -1
-                       :offset 300}
-            root {:type :root-nonleaf
-                  :key-ptrs (sorted-map "c" 200)
-                  :last 300
-                  :offset 100}
-            cache (cache-nodes [root low-leaf high-leaf] nil {})
-            ; what the cache should become after merging
-            expected-cache
-            {100 {:type :root-leaf
-                  :key-ptrs (sorted-map "a" 1000
-                                        "b" 1100
-                                        "c" 1200
-                                        "d" 1300)
-                  :offset   100
-                  :altered? true}}
-            cache (merge-root-leaf low-leaf high-leaf root nil cache)]
-        (is (= cache expected-cache))))))
+(comment
+  (with-private-fns [b-plus-tree.core [cache-nodes merge-internal]]
+    (deftest merge-internal-test
+      (testing "merging internal nodes"
+        (let [root {:type :root-nonleaf
+                    :key-ptrs (sorted-map "c" 200
+                                          "e" 300)
+                    :last 400
+                    :offset 100}
+              low-internal {:type :internal
+                            :key-ptrs (sorted-map "b" 500)
+                            :last 600
+                            :offset 200}
+              mid-internal {:type :internal
+                            :key-ptrs (sorted-map "d" 700)
+                            :last 800
+                            :offset 300}
+              high-internal {:type :internal
+                             :key-ptrs (sorted-map "d" 900)
+                             :last 1000
+                             :offset 400}
+              a-leaf {:type :leaf
+                      :key-ptrs (sorted-map "a" 2000)
+                      :prev -1
+                      :next 600
+                      :offset 500}
+              b-leaf {:type :leaf
+                      :key-ptrs (sorted-map "b" 2100)
+                      :prev 500
+                      :next 700
+                      :offset 600}
+              c-leaf {:type :leaf
+                      :key-ptrs (sorted-map "c" 2200)
+                      :prev 600
+                      :next 800
+                      :offset 700}
+              d-leaf {:type :leaf
+                      :key-ptrs (sorted-map "d" 2300)
+                      :prev 700
+                      :next 900
+                      :offset 800}
+              e-leaf {:type :leaf
+                      :key-ptrs (sorted-map "e" 2400)
+                      :prev 800
+                      :next 1000
+                      :offset 900}
+              f-leaf {:type :leaf
+                      :key-ptrs (sorted-map "f" 2500)
+                      :prev 900
+                      :next -1
+                      :offset 1000}
+              initial-cache (cache-nodes
+                             [root low-internal mid-internal high-internal
+                              a-leaf b-leaf c-leaf d-leaf e-leaf f-leaf]
+                             nil
+                             {})
+              [_ cache] (merge-internal low-internal mid-internal root
+                                        nil initial-cache)
+              expected-cache (-> initial-cache
+                                 (dissoc 200)
+                                 (assoc 300
+                                   {:type :internal
+                                    :key-ptrs (sorted-map "b" 500
+                                                          "c" 600
+                                                          "d" 700)
+                                    :last 800
+                                    :offset 300
+                                    :altered? true})
+                                 (assoc 100
+                                   {:type :root-nonleaf
+                                    :key-ptrs (sorted-map "e" 300)
+                                    :last 400
+                                    :offset 100
+                                    :altered? true}))]
+          (is (= cache expected-cache)))))))
 
-(with-private-fns [b-plus-tree.core [cache-nodes merge-root-internal]]
-  (deftest merge-root-internal-test
-    (testing "merging root with internal nodes"
-      (let [root {:type :root-nonleaf
-                  :key-ptrs (sorted-map "c" 200)
-                  :last 300
-                  :offset 100}
-            low-internal {:type :internal
-                          :key-ptrs (sorted-map "b" 400)
-                          :last 500
-                          :offset 200}
-            high-internal {:type :internal
-                           :key-ptrs (sorted-map "d" 600)
-                           :last 700
-                           :offset 300}
-            a-leaf {:type :leaf
-                    :key-ptrs (sorted-map "a" 1000)
-                    :prev -1
-                    :next 500
-                    :offset 400}
-            b-leaf {:type :leaf
-                    :key-ptrs (sorted-map "b" 1100)
-                    :prev 400
-                    :next 600
-                    :offset 500}
-            c-leaf {:type :leaf
-                    :key-ptrs (sorted-map "c" 1200)
-                    :prev 500
-                    :next 700
-                    :offset 600}
-            d-leaf {:type :leaf
-                    :key-ptrs (sorted-map "d" 1300)
-                    :prev 600
-                    :next -1
-                    :offset 700}
-            initial-cache (cache-nodes [root low-internal high-internal
-                                        a-leaf b-leaf c-leaf d-leaf]
-                                       nil
-                                       {})
-            cache (merge-root-internal low-internal high-internal root
-                                       nil initial-cache)
-            expected-cache (-> initial-cache
-                               (dissoc 200 300)
-                               (assoc 100
-                                 {:type :root-nonleaf
-                                  :key-ptrs (sorted-map "b" 400
-                                                        "c" 500
-                                                        "d" 600)
-                                  :last 700
-                                  :offset 100
-                                  :altered? true}))]
-        (is (= cache expected-cache))))))
+(comment
+  (with-private-fns [b-plus-tree.core [cache-nodes merge-root-leaf]]
+    (deftest merge-root-leaf-test
+      (testing "merging root with leaves"
+        (let [low-leaf  {:type :leaf
+                         :key-ptrs (sorted-map "a" 1000
+                                               "b" 1100)
+                         :prev -1
+                         :next 300
+                         :offset 200},
+              high-leaf {:type :leaf
+                         :key-ptrs (sorted-map "c" 1200
+                                               "d" 1300)
+                         :prev 200
+                         :next -1
+                         :offset 300}
+              root {:type :root-nonleaf
+                    :key-ptrs (sorted-map "c" 200)
+                    :last 300
+                    :offset 100}
+              cache (cache-nodes [root low-leaf high-leaf] nil {})
+                                        ; what the cache should become after merging
+              expected-cache
+              {100 {:type :root-leaf
+                    :key-ptrs (sorted-map "a" 1000
+                                          "b" 1100
+                                          "c" 1200
+                                          "d" 1300)
+                    :offset   100
+                    :altered? true}}
+              cache (merge-root-leaf low-leaf high-leaf root nil cache)]
+          (is (= cache expected-cache)))))))
 
-(with-private-fns [b-plus-tree.core [cache-nodes
-                                     steal-prev-internal
-                                     steal-next-internal]]
-  (deftest steal-prev-internal-test
-    (testing "testing steal from previous internal node function"
-      (let [root {:type :root-nonleaf
-                  :key-ptrs (sorted-map "d" 200)
-                  :last 300
-                  :offset 100
-                  :altered? true}
-            low-internal {:type :internal
-                          :key-ptrs (sorted-map "b" 400
-                                                "c" 500)
-                          :last 600
-                          :offset 200
-                          :altered? true}
-            high-internal {:type :internal
-                           :key-ptrs (sorted-map "e" 700)
-                           :last 800
-                           :offset 300
-                           :altered? true}
-            a-leaf {:type :leaf
-                    :key-ptrs (sorted-map "a" 2000)
-                    :prev -1
-                    :next 500
-                    :offset 400}
-            b-leaf {:type :leaf
-                    :key-ptrs (sorted-map "b" 2100)
-                    :prev 400
-                    :next 600
-                    :offset 500}
-            c-leaf {:type :leaf
-                    :key-ptrs (sorted-map "c" 2200)
-                    :prev 500
-                    :next 700
-                    :offset 600}
-            d-leaf {:type :leaf
-                    :key-ptrs (sorted-map "d" 2300)
-                    :prev 600
-                    :next 800
-                    :offset 700}
-            e-leaf {:type :leaf
-                    :key-ptrs (sorted-map "e" 2400)
-                    :prev 700
-                    :next -1
-                    :offset 800}
-            initial-cache (cache-nodes
-                           [root low-internal high-internal
-                            a-leaf b-leaf c-leaf d-leaf e-leaf]
-                           nil
-                           {})
-            [_ cache] (steal-prev-internal high-internal low-internal root
-                                           nil initial-cache)
-            expected-cache (assoc initial-cache
-                             100 {:type :root-nonleaf
-                                  :key-ptrs (sorted-map "c" 200)
-                                  :last 300
-                                  :offset 100
-                                  :altered? true}
-                             200 {:type :internal
-                                  :key-ptrs (sorted-map "b" 400)
-                                  :last 500
-                                  :offset 200
-                                  :altered? true}
-                             300 {:type :internal
-                                  :key-ptrs (sorted-map "d" 600
-                                                        "e" 700)
-                                  :last 800
-                                  :offset 300
-                                  :altered? true})
-            _ (is (= cache expected-cache))
-            ; now try stealing back
-            {low-internal 200, high-internal 300, root 100} cache
-            [_ cache] (steal-next-internal low-internal high-internal root
-                                           nil cache)]
-        (is (= cache initial-cache))))))
+(comment
+  (with-private-fns [b-plus-tree.core [cache-nodes merge-root-internal]]
+    (deftest merge-root-internal-test
+      (testing "merging root with internal nodes"
+        (let [root {:type :root-nonleaf
+                    :key-ptrs (sorted-map "c" 200)
+                    :last 300
+                    :offset 100}
+              low-internal {:type :internal
+                            :key-ptrs (sorted-map "b" 400)
+                            :last 500
+                            :offset 200}
+              high-internal {:type :internal
+                             :key-ptrs (sorted-map "d" 600)
+                             :last 700
+                             :offset 300}
+              a-leaf {:type :leaf
+                      :key-ptrs (sorted-map "a" 1000)
+                      :prev -1
+                      :next 500
+                      :offset 400}
+              b-leaf {:type :leaf
+                      :key-ptrs (sorted-map "b" 1100)
+                      :prev 400
+                      :next 600
+                      :offset 500}
+              c-leaf {:type :leaf
+                      :key-ptrs (sorted-map "c" 1200)
+                      :prev 500
+                      :next 700
+                      :offset 600}
+              d-leaf {:type :leaf
+                      :key-ptrs (sorted-map "d" 1300)
+                      :prev 600
+                      :next -1
+                      :offset 700}
+              initial-cache (cache-nodes [root low-internal high-internal
+                                          a-leaf b-leaf c-leaf d-leaf]
+                                         nil
+                                         {})
+              cache (merge-root-internal low-internal high-internal root
+                                         nil initial-cache)
+              expected-cache (-> initial-cache
+                                 (dissoc 200 300)
+                                 (assoc 100
+                                   {:type :root-nonleaf
+                                    :key-ptrs (sorted-map "b" 400
+                                                          "c" 500
+                                                          "d" 600)
+                                    :last 700
+                                    :offset 100
+                                    :altered? true}))]
+          (is (= cache expected-cache)))))))
+(comment
+  (with-private-fns [b-plus-tree.core [cache-nodes
+                                       steal-prev-internal
+                                       steal-next-internal]]
+    (deftest steal-prev-internal-test
+      (testing "testing steal from previous internal node function"
+        (let [root {:type :root-nonleaf
+                    :key-ptrs (sorted-map "d" 200)
+                    :last 300
+                    :offset 100
+                    :altered? true}
+              low-internal {:type :internal
+                            :key-ptrs (sorted-map "b" 400
+                                                  "c" 500)
+                            :last 600
+                            :offset 200
+                            :altered? true}
+              high-internal {:type :internal
+                             :key-ptrs (sorted-map "e" 700)
+                             :last 800
+                             :offset 300
+                             :altered? true}
+              a-leaf {:type :leaf
+                      :key-ptrs (sorted-map "a" 2000)
+                      :prev -1
+                      :next 500
+                      :offset 400}
+              b-leaf {:type :leaf
+                      :key-ptrs (sorted-map "b" 2100)
+                      :prev 400
+                      :next 600
+                      :offset 500}
+              c-leaf {:type :leaf
+                      :key-ptrs (sorted-map "c" 2200)
+                      :prev 500
+                      :next 700
+                      :offset 600}
+              d-leaf {:type :leaf
+                      :key-ptrs (sorted-map "d" 2300)
+                      :prev 600
+                      :next 800
+                      :offset 700}
+              e-leaf {:type :leaf
+                      :key-ptrs (sorted-map "e" 2400)
+                      :prev 700
+                      :next -1
+                      :offset 800}
+              initial-cache (cache-nodes
+                             [root low-internal high-internal
+                              a-leaf b-leaf c-leaf d-leaf e-leaf]
+                             nil
+                             {})
+              [_ cache] (steal-prev-internal high-internal low-internal root
+                                             nil initial-cache)
+              expected-cache (assoc initial-cache
+                               100 {:type :root-nonleaf
+                                    :key-ptrs (sorted-map "c" 200)
+                                    :last 300
+                                    :offset 100
+                                    :altered? true}
+                               200 {:type :internal
+                                    :key-ptrs (sorted-map "b" 400)
+                                    :last 500
+                                    :offset 200
+                                    :altered? true}
+                               300 {:type :internal
+                                    :key-ptrs (sorted-map "d" 600
+                                                          "e" 700)
+                                    :last 800
+                                    :offset 300
+                                    :altered? true})
+              _ (is (= cache expected-cache))
+                                        ; now try stealing back
+              {low-internal 200, high-internal 300, root 100} cache
+              [_ cache] (steal-next-internal low-internal high-internal root
+                                             nil cache)]
+          (is (= cache initial-cache)))))))
 
-(deftest no-merge-test
-  (testing "removing from B+ Tree without any merges"
+(comment
+  (deftest no-merge-test
+    (testing "removing from B+ Tree without any merges"
+      (binding [order 32]
+        (delete-file)
+        (new-tree)
+        (with-open [raf (get-raf)]
+          (let [header (get-header raf)
+                
+                key-vals (unsorted-numbered-strings 1000)
+                
+                [header cache]
+                (b-plus-tree.core/insert-all key-vals raf header)
+
+                [remaining, missing, header, cache]
+                (loop [key-vals  (into (sorted-map) key-vals)
+                       header    header
+                       cache     cache
+                       remaining {}
+                       missing   #{}
+                       n         0]
+                  (if-let [[k v] (first key-vals)]
+                    (let [[remaining missing header cache]
+                          (try
+                            (let [[header cache]
+                                  (b-plus-tree.core/delete k raf header
+                                                           :cache cache)]
+                              [remaining, missing, header, cache])
+
+                            (catch UnsupportedOperationException e
+                              [(assoc remaining k v), missing, header, cache])
+                            (catch clojure.lang.ExceptionInfo e
+                              (println (.getMessage e) (ex-data e))
+                              (case (:cause (ex-data e))
+                                :missing-keys
+                                [remaining,
+                                 (apply conj missing
+                                        (:missing-keys (ex-data e))),
+                                 header,
+                                 cache]
+
+                                [remaining, missing, header, cache]))
+                            (catch Exception e
+                              (println "n:" n)
+                              (throw e)))]
+
+                      (recur (rest key-vals)
+                             header
+                             cache
+                             remaining
+                             missing
+                             (inc n)))
+                                        ; reached the end
+                    [remaining, missing, header, cache]))]
+
+            (is (b-plus-tree.core/map-equals? remaining raf header
+                                              :cache cache))
+            
+            (b-plus-tree.io/write-cache cache raf)
+            (is (b-plus-tree.core/map-equals? remaining raf header))
+
+            (doseq [k missing]
+              (let [[v _] (b-plus-tree.core/find-val k raf header
+                                                     :cache cache)]
+                (if v
+                  (println "Found missing key" v)
+                  (println "Could not find missing key" v))))))
+        (delete-file)))))
+
+(deftest delete-test
+  (testing "testing delete function"
     (binding [order 32]
       (delete-file)
       (new-tree)
       (with-open [raf (get-raf)]
         (let [header (get-header raf)
+
+              key-vals
+              {"a" "aa"
+               "b" "bb"
+               "c" "cc"
+               "d" "dd"
+               "e" "ee"
+               "f" "ff"
+               "g" "gg"
+               "h" "hh"
+               "i" "ii"
+               "j" "jj"
+               "k" "kk"
+               "l" "ll"
+               "m" "mm"
+               "n" "nn"
+               "o" "oo"
+               "p" "pp"}
+
+              key-vals
+              (numbered-strings 150)
               
-              key-vals (unsorted-numbered-strings 1000)
+              ;; {"apple" "red-green",
+              ;;  "orange" "orange",
+              ;;  "banana" "yellow",
+              ;;  "cucumber" "green",
+              ;;  "pear" "yellow-green"
+              ;;  "grape" "purple"
+              ;;  "coconut" "brown-white"
+              ;;  "chocolate" "brown"
+              ;;  "blackberry" "black"
+              ;;  "blueberry" "blue"
+              ;;  "strawberry" "red"}
+
+              half (-> key-vals count (* 4/5))
+
+              _ (println "HALF:" half)
               
+              half-keys (take half
+                              (shuffle (keys key-vals)))
+
               [header cache]
               (b-plus-tree.core/insert-all key-vals raf header)
 
-              [remaining, missing, header, cache]
-              (loop [key-vals  (into (sorted-map) key-vals)
-                     header    header
-                     cache     cache
-                     remaining {}
-                     missing   #{}
-                     n         0]
-                ;; (println "header:" header)
-                ;; (println "remaining:" (count remaining))
-                (if-let [[k v] (first key-vals)]
-                  (let [[remaining missing header cache]
-                        (try
-                          (let [[header cache]
-                                (b-plus-tree.core/delete k raf header
-                                                         :cache cache)]
-                            [remaining, missing, header, cache])
+              _
+              (is (b-plus-tree.core/map-equals? key-vals raf header
+                                                :cache cache))
 
-                          (catch UnsupportedOperationException e
-;                            (println (.getMessage e))
-                            [(assoc remaining k v), missing, header, cache])
-                          (catch clojure.lang.ExceptionInfo e
-                            (println (.getMessage e) (ex-data e))
-                            [remaining,
-                             (apply conj missing
-                                    (:missing-keys (ex-data e))),
-                             header,
-                             cache])
-                          (catch Exception e
-                            (println "n:" n)
-                            (throw e)))]
+              ;; _ (b-plus-tree.core/print-leaf-keys raf header
+              ;;                                     :cache cache)
+              [header cache]
+              (b-plus-tree.core/delete-all half-keys raf header
+                                           :cache cache)
 
-                    (recur (rest key-vals)
-                           header
-                           cache
-                           remaining
-                           missing
-                           (inc n)))
-                                        ; reached the end
-                  [remaining, missing, header, cache]))]
-
-           (is (b-plus-tree.core/map-equals? remaining raf header
-                                            :cache cache))
+              remaining (apply dissoc key-vals half-keys)
+              ]
+          (println "size:" (:count header))
+          (println "root:" (cache (:root header)))
           
-          (b-plus-tree.io/write-cache cache raf)
-          (is (b-plus-tree.core/map-equals? remaining raf header))
-
-          (doseq [k missing]
-            (let [[v _] (b-plus-tree.core/find-val k raf header
-                                                   :cache cache)]
-              (if v
-                (println "Found missing key" v)
-                (println "Could not find missing key" v))))))
-      (delete-file))))
+          (is (b-plus-tree.core/map-equals? remaining raf header
+                                            :cache cache))
+          (is (not (b-plus-tree.core/map-equals? (into (sorted-map)
+                                                       (nnext remaining))
+                                                 raf header
+                                                 :cache cache)))
+;          (println cache)
+          (println "now let's see what we've got")
+          (comment
+            (b-plus-tree.core/print-leaf-keys raf header
+                                              :cache cache)))))))
