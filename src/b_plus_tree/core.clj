@@ -615,10 +615,6 @@
 (defn- merge-prev-leaf
   "Merge leaf with the previous leaf. Returns cache"
   ([leaf prev-leaf deleted-key stack raf cache]
-     (comment
-       (println "PREV"
-                (:prev prev-leaf) "<-[" (:offset prev-leaf) "]<->["
-                (:offset leaf) "]->" (:next leaf)))
      (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
            first-key (-> leaf :key-ptrs first first)
            ; the key to remove from the parent, which is either the
@@ -1107,7 +1103,9 @@
        :or {cache {}}}]
      (let [key-seq (key-seq-from substring raf header
                                  :cache cache)]
-       (filter #(.startsWith % substring) key-seq))))
+       (->> key-seq
+            (drop-while #(not (.startsWith % substring)))
+            (take-while #(.startsWith % substring))))))
 
 (defn print-starts-with-remove
   "Prints all of the keys in the B+ Tree which start with substring, and then
@@ -1118,7 +1116,8 @@
      (if-let [key-seq (seq (key-starts-with substring raf header
                                             :cache cache))]
        (do
-         (println key-seq)
+         (doseq [k key-seq]
+           (println k))
          (delete-all key-seq raf header
                      :cache cache))
        (do
@@ -1190,54 +1189,4 @@
        (when (seq leaf-seq)
          (doall (map (comp println keys :key-ptrs) leaf-seq))))))
 
-(defn traverse
-  "Returns a lazy sequence of the key value pairs contained in the B+ Tree,
-  assuming that leaf contains start, the key from which traversal begins.
-  The sequence ends before stop is reached, or if no stop is given ends when
-  there are no more leaves left.
 
-  Not working."
-  ([leaf start page-size raf]
-     (let [next-fn
-           (fn next-fn [leaf start raf found?]
-             (let [next-ptr (:next-leaf leaf)]
-               (if found?
-                 (lazy-cat
-                  (->> leaf
-                       b-plus-tree.nodes/key-ptrs
-                       (map (fn [[k ptr]]
-                              [k (:data (b-plus-tree.io/read-node ptr raf))])))
-                  (when (not= next-ptr -1)
-                    (let [next-leaf (b-plus-tree.io/read-node next-ptr raf)]
-                      (lazy-seq (next-fn next-leaf start raf true)))))
-                 (when-let [pairs (->> leaf
-                                   b-plus-tree.nodes/key-ptrs
-                                   (filter #(-> % (compare start) neg? not))
-                                   #(when-not found? (contains? % start)))]
-                   (lazy-cat
-                    (map (fn [[k ptr]]
-                           [k (:data (b-plus-tree.io/read-node ptr raf))])
-                         pairs)
-                    (when (not= next-ptr -1)
-                      (let [next-leaf (b-plus-tree.io/read-node next-ptr raf)]
-                        (next-fn next-leaf start raf true))))))))]
-       (lazy-seq (next-fn leaf start raf false))))
-  ([leaf start stop page-size raf]
-     (take-while (fn [[k v]] (-> k (compare stop) neg?))
-                 (traverse leaf start page-size raf))))
-
-(comment "work in progress"
-         (defn find-slice
-           ""
-           ([start page-size raf]
-              (when-let [leaf (find-type start
-                                         :leaf
-                                         (b-plus-tree.io/read-root page-size raf)
-                                         raf)]
-                (traverse start leaf page-size raf)))
-           ([start stop page-size raf]
-              (when-let [leaf (find-type start
-                                         :leaf
-                                         (b-plus-tree.io/read-root page-size raf)
-                                         raf)]
-                (traverse start stop leaf page-size raf)))))
