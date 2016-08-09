@@ -4,6 +4,7 @@
             [gloss.io :as gio]
             [b-plus-tree.nodes :as nodes]
             [b-plus-tree.util :as util]
+            [taoensso.timbre :as log]
             ))
 
 (defn header-size
@@ -73,7 +74,7 @@
 
 (defn read-header
   "Reads the header from the RandomAccessFile."
-  [raf]
+  [^java.io.RandomAccessFile raf]
      (.seek raf 0) ; go to head of file
      (let [header-bytes (byte-array (header-size))]
        (.readFully raf header-bytes)
@@ -81,21 +82,23 @@
 
 (defn write-header
   "Writes the header to the RandomAccessFile."
-  [header raf]
-     (.seek raf 0)
-     (.write raf
-             (.array (gio/contiguous (gio/encode nodes/header-node
-                                                           header)))))
+  [header ^java.io.RandomAccessFile raf]
+  (log/info "Seeking to header")
+   (.seek raf 0)
+   (log/info "Writing header...")
+   (.write raf
+           (.array (gio/contiguous (gio/encode nodes/header-node
+                                                         header)))))
 
 (defn read-node
   "Reads the node stored in the RandomAccessFile at the given offset."
-  [offset raf]
-     (.seek raf offset)
-     (let [size (.readShort raf)
-           node-bytes (byte-array size)]
-       (.readFully raf node-bytes)
-       (assoc (gio/decode nodes/node (gio/to-byte-buffer node-bytes))
-         :offset offset)))
+  [offset ^java.io.RandomAccessFile raf]
+   (.seek raf offset)
+   (let [size (.readShort raf)
+         node-bytes (byte-array size)]
+     (.readFully raf node-bytes)
+     (assoc (gio/decode nodes/node (gio/to-byte-buffer node-bytes))
+       :offset offset)))
 
 (comment
   (defn read-root
@@ -108,13 +111,15 @@
 (defn write-node
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."
-  [{:keys [offset] :as node} raf]
+  [{:keys [offset] :as node} ^java.io.RandomAccessFile raf]
      (let [encoded-node (gio/encode nodes/node node)
            size (gloss/byte-count encoded-node)]
+      (log/infof "writing node %s" offset)
        (doto raf
          (.seek offset)
          (.writeShort size)
          (.write (.array (gio/contiguous encoded-node))))
+      (log/infof "done writing node %s" offset)
        (.getFilePointer raf)))
 
 (defn write-cache

@@ -2,13 +2,14 @@
   (:require
     [b-plus-tree.core :as core]
     [b-plus-tree.io :as b.io]
+    [clojure.string :as s]
     [clojure.java.io :as io]))
 
 (try
   (require '[clojure.tools.namespace.repl :refer [refresh]])
   (catch Exception e nil))
 
-(def f "/tmp/btreefile")
+(defonce f (str "/tmp/btreefile" (System/nanoTime)))
 (def order    32)
 (def key-size 32)
 (def val-size 32)
@@ -24,21 +25,19 @@
       (let [[header' cache] (core/insert (str "foo" i) (str i "bar") raf header )]
 
         (b-plus-tree.io/write-cache cache raf)
-        header'
+        (b-plus-tree.io/write-header header' raf)
+        [header' cache]
   ))
   ))
 
 
 ; (def header (b.io/read-header raf))
 
-(defn insert-data
-  [raf header]
-    (loop [i 0
-           header header
-           cache nil]
-      (if (> i 1000)
-        [header cache]
-        (let [rez (core/insert (str "foo" i) (str i "bar") raf header )]
-          (recur (inc i) (first rez) (last rez) ))))
+(defn word-test [raf & {:keys [max-keys] :or {max-keys 1000} }]
+  (let [words (take max-keys (s/split (slurp "/usr/share/dict/words") #"\n"))
+        word-list (zipmap words (map (fn[x] (->> x reverse (s/join "")))  words))]
 
-          )
+  (let [bulk-tx (core/insert-all word-list raf (b.io/read-header raf) ) ]
+    (b.io/write-header (first bulk-tx) raf)
+    (b.io/write-cache (last bulk-tx) raf)
+  )))
