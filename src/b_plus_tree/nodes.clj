@@ -1,23 +1,23 @@
 (ns b-plus-tree.nodes
   "Defines encodings for the different types of nodes used in the B+ Tree."
-  (:require [gloss core]
+  (:require [gloss.core :as gloss]
             [b-plus-tree.util :refer [dissoc-in dbg verbose]]))
 
-(gloss.core/defcodec- node-types
-  (gloss.core/enum :byte
+(gloss/defcodec- node-types
+  (gloss/enum :byte
                    :root-leaf :root-nonleaf :internal :leaf :record))
 
-(gloss.core/defcodec- raf-offset
+(gloss/defcodec- raf-offset
   :int64)
 
-(gloss.core/defcodec- C-string
-  (gloss.core/string :utf-8 :delimiters ["\0"]))
+(gloss/defcodec- C-string
+  (gloss/string :utf-8 :delimiters ["\0"]))
 
-(gloss.core/defcodec- key-list
-  (gloss.core/repeated C-string))
+(gloss/defcodec- key-list
+  (gloss/repeated C-string))
 
-(gloss.core/defcodec- child-list
-  (gloss.core/repeated raf-offset))
+(gloss/defcodec- child-list
+  (gloss/repeated raf-offset))
 
 (defn- node-map
   "Turns a node's :keys and :ptrs into a map :key-ptrs, removing the original
@@ -35,8 +35,8 @@ fields."
                 :ptrs (vals key-ptrs))
          (dissoc :key-ptrs))))
 
-(gloss.core/defcodec header-node
-  (gloss.core/ordered-map
+(gloss/defcodec header-node
+  (gloss/ordered-map
    :count     :int32
    :free      raf-offset
    :order     :int16
@@ -46,8 +46,8 @@ fields."
    :root      raf-offset))
 
 (def root-leaf-node
-  (gloss.core/compile-frame
-   (gloss.core/ordered-map
+  (gloss/compile-frame
+   (gloss/ordered-map
     :type :root-leaf
     :keys key-list
     :ptrs child-list)
@@ -55,8 +55,8 @@ fields."
    node-map))
 
 (def root-nonleaf-node
-  (gloss.core/compile-frame
-   (gloss.core/ordered-map
+  (gloss/compile-frame
+   (gloss/ordered-map
     :type :root-nonleaf
     :keys key-list
     :ptrs child-list
@@ -65,8 +65,8 @@ fields."
    node-map))
 
 (def internal-node
-  (gloss.core/compile-frame
-   (gloss.core/ordered-map
+  (gloss/compile-frame
+   (gloss/ordered-map
     :type :internal
     :keys key-list
     :ptrs child-list
@@ -75,8 +75,8 @@ fields."
    node-map))
 
 (def leaf-node
-  (gloss.core/compile-frame
-   (gloss.core/ordered-map
+  (gloss/compile-frame
+   (gloss/ordered-map
     :type :leaf
     :keys key-list
     :ptrs child-list
@@ -85,14 +85,14 @@ fields."
    node-unmap
    node-map))
 
-(gloss.core/defcodec record-node
-  (gloss.core/ordered-map
+(gloss/defcodec record-node
+  (gloss/ordered-map
    :type :record
    :data C-string))
 
 (def node
-  (gloss.core/compile-frame
-   (gloss.core/header node-types
+  (gloss/compile-frame
+   (gloss/header node-types
                       {:root-leaf    root-leaf-node
                        :root-nonleaf root-nonleaf-node
                        :internal     internal-node

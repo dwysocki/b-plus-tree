@@ -89,9 +89,9 @@
         (find-record key node raf
                      :cache cache)
         [nil cache])
-      
+
       (= :record (:type node)) [nil cache]
-      
+
       :default
       (if-let [[nxt cache] (next-node key node raf :cache cache)]
         (if (b-plus-tree.util/in? types (:type nxt))
@@ -165,7 +165,7 @@
                                                          key-ptrs),
            [left-offset right-offset free]
            (b-plus-tree.seq/n-range free 3 page-size),
-           
+
            left-node {:type :leaf
                       :key-ptrs left
                       :prev -1
@@ -201,9 +201,9 @@
        :or {cache {}}}]
      (let [[left-kps [mid-k mid-p] right-kps]
            (b-plus-tree.seq/split-center key-ptrs),
-           
+
            [left right] (map (partial into (sorted-map)) [left-kps right-kps]),
-           
+
            [left-offset right-offset free]
            (b-plus-tree.seq/n-range free 3 page-size),
 
@@ -371,8 +371,8 @@
      :as header}
     & {:keys [cache]
        :or {cache {}}}]
-     {:pre [(>= key-size (count key))
-            (>= val-size (count val))]}
+    ;  {:pre [(>= key-size (count key))
+    ;         (>= val-size (count val))]}
      (if (zero? size)
        ; empty B+ Tree
        (let [[root record] (b-plus-tree.nodes/new-root key val free page-size)]
@@ -419,8 +419,7 @@
        :or {cache {}}}]
      (if-let [entry (first keyvals)]
        (let [[key val] entry
-             [header cache] (b-plus-tree.core/insert key val raf
-                                                     header
+             [header cache] (insert key val raf header
                                                      :cache cache)]
          (recur (next keyvals) raf header {:cache cache}))
        [header cache])))
@@ -438,7 +437,7 @@
            [{:keys [key-ptrs] :as node} cache]
            (refresh-node node raf cache)
 ;           (get-node (:offset node) raf cache)
-           
+
            ; set of all keys which will be replaced
            replaced-keys (apply clojure.set/intersection
                                 (map (comp set keys)
@@ -665,7 +664,7 @@
                    (cache-node prev-leaf raf cache)
                    ; no such node exists, leave cache unchanged
                    cache)
-           
+
            ; if leaf is not the leftmost leaf, and its leftmost key
            ; was deleted, then we will need to replace the deleted key
            ; in the internal nodes with the new leftmost key
@@ -923,8 +922,8 @@
   ([ks raf header
     & {:keys [cache]
        :or {cache {}}}]
-     
-     
+
+
      (if-let [k (first ks)]
        (let [[header cache] (b-plus-tree.core/delete k raf
                                                      header
@@ -1147,7 +1146,7 @@
                             (if-let [ks (next keys)]
                               (cons k )))))]
              )))
-       
+
        )))
 
 
@@ -1188,5 +1187,3 @@
                               :cache cache)]
        (when (seq leaf-seq)
          (doall (map (comp println keys :key-ptrs) leaf-seq))))))
-
-
