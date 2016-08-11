@@ -86,7 +86,8 @@
     (conj acc  [(str key "->" val)
                 [(if left
                   (.export left [])
-                  (str key "->" val ":left")) (when right (.export right [])) ] ])
+                  (str key "->" val ":left"))
+                  (when right (.export right [])) ] ])
     )
 
   (delete [this k]
