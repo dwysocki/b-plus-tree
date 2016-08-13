@@ -6,7 +6,8 @@
     [b-plus-tree.io :as b.io]
     [b-plus-tree.heap :as heap]
     [clojure.string :as s]
-    [clojure.java.io :as io]))
+    [clojure.java.io :as io]
+    [b-plus-tree.util :refer [charset]]))
 
 
 
@@ -35,7 +36,7 @@
 
 
 (def words (take 100000 (s/split (slurp "/usr/share/dict/words") #"\n")))
-(def word-list (zipmap words (map (fn[x] (->> x reverse (s/join "")))  words)))
+(def word-list (zipmap words (map (fn[x] (s/replace (->> x reverse (s/join "")) #"\'" ""))  words)))
 
 (defn word-test [raf & {:keys [max-keys] :or {max-keys 1000} }]
 
@@ -44,11 +45,15 @@
     (b.io/write-header (first bulk-tx) raf)
     (b.io/write-cache (last bulk-tx) raf)
     ))
-(defn charset [start end] (map (fn[x] [(apply str (repeat 4 (char x))) x] ) (range start end)))
- 
+
+
+
 (defn heap-test
   []
   (let [heapobj (heap/init "00000000" 123)]
     (mapv (fn[[x y]] (.insert heapobj x y)) (take 10 (seq word-list)))
     heapobj
     ))
+
+
+ (def builder (StringBuilder. "digraph pict { \n size=\"12,12\"; node [color=lightblue2, style=filled]; \n"))

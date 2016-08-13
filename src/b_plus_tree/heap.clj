@@ -29,6 +29,7 @@
   (getDepth [])
   (printed [])
   (getMarker [])
+  (write [writer])
   )
 ;
 ; (defn iterate [o]
@@ -48,11 +49,34 @@
         [pk pv] (.getNode nparent)]
     (when (lt? (.getKey nchild) (.getKey nparent))
        ; (log/infof "Comparing parent \nP:[%s] -> [%s] " nparent nchild)
+
+      (doto nchild (.setKey pk) (.setValue pv))
       (.setNode nparent ck cv)
-      (doto nchild (.setKey pk) (.setValue pv)))
+      )
 
       nil
       ))
+
+(defn node-iter
+  [root writer]
+  (loop [i 0
+         nodes [root]]
+     (when-not (empty? nodes)
+       (let [subnode-writer
+               (fn [p]
+                 (when p
+                   (let [l (.getLeft p)
+                         r (.getRight p)]
+                     (when l
+                       (.append writer (format "\"%s\"->\"%s\"; \n" (.getKey p) (.getKey l))))
+                     (when r
+                       (.append writer (format "\"%s\"->\"%s\"; \n" (.getKey p) (.getKey r))))
+                   [l r])))]
+
+            (recur (inc i)
+                    (mapcat subnode-writer nodes))
+         )))
+  )
 
 (deftype Node
   [^:volatile-mutable key
@@ -70,17 +94,29 @@
             ; (when left (format "\n%sN#L%s" separator (.toString left)  ))
             ; (when right (format "\n%sN#R%s" separator (.toString right)  ))
             )))
+    clojure.lang.Indexed
+    (nth [this i] (.getLeft this))
+    (nth [this i not-found] (or (.getLeft this) not-found))
+
+    clojure.lang.Seqable
+    (seq [this] [(.getLeft this) (.getRight this)])
 
    INode
+   (write [this writer]
+     (node-iter this writer)
+     )
+
+
    (printed [this]
-     (let [
-            o (tree-seq identity (fn[x] [(.getLeft x) (.getRight x)]) this)]
-        (mapv (fn [x] (when x (let [depth (.getDepth x) key (.getKey x) val (.getValue x)
-                                    marker (.getMarker x)
-                                    separator (apply str (repeat (* 1 depth) "-") )]
+     (let [o (tree-seq identity (fn[x] [(.getLeft x) (.getRight x)]) this)]
+        (mapv (fn [x] (when x
+                        (let [depth (.getDepth x) key (.getKey x) val (.getValue x)
+                              marker (.getMarker x)
+                              separator (apply str (take 300 (repeat (* 1 depth) "-")) )]
             (println (format ":%s:%s[%s]#%s->%s" depth separator marker key val ))) ))
             o )))
-    (getMarker [_] marker)
+
+   (getMarker [_] marker)
    (getLeft [_] left)
    (getRight [_] right)
    (getDepth [_] depth)
@@ -118,7 +154,7 @@
          (.inOrder right))))
 
    (setNode [this key val]
-     ;; during this insert, we may want to compare this object's parent as well
+
      (.setKey this key)
      (.setValue this val)
      (when parent
@@ -131,8 +167,7 @@
 
 
    (insert [this key val]
-     (let [
-          pick (mod (hash key) 2)]
+     (let [pick (mod (hash key) 2)]
       (if-not left
         (let [n (Node. key val this nil nil (inc depth) :L)]
           (set! left n)
