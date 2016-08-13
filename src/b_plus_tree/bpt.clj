@@ -17,6 +17,8 @@
 (defprotocol IDataNode
   (first-key [_]))
 (def branching-factor 4)
+(def b2! (-> (/ branching-factor 2) int))
+
 (def gt? (comp pos? compare))
 
 (def lt? (comp neg? compare))
@@ -82,13 +84,32 @@
                   ;; the next step is to check if the
                   ;; internode has maxout the available slots
                   ;;
-                  (when (>= (count new-markers) (dec branching-factor))
-                    (log/info "Divide MARKERS!!")
-                  )
-                (log/info "Parent has availability" marker-candidate)
-                (-> this
-                  (assoc :markers new-markers)
-                  (assoc :nodes new-nodes )))
+                  (if (> (count new-markers) (dec branching-factor))
+                    (let [[lmark-slice rmark-slice] (slice new-markers  b2!)
+                          root-marker (first rmark-slice)
+                          position (find-insert-pos (map (fn[x] {:key (apply max (mapv :key (:nodes x)))}) new-nodes) root-marker)
+                          [subleft subright] (slice new-nodes position)
+                          ; [lnode-slice rnode-slice] (slice new-nodes b2!)
+                          ]
+                          (log/infof "Divide MARKERS!! %s vs %s " lmark-slice rmark-slice)
+                          (let [
+
+                                left-inter (->Node false lmark-slice subleft)
+                                right-inter (->Node false (rest rmark-slice) subright)
+                                root-inter (->Node false [root-marker] [left-inter right-inter])]
+
+
+                          root-inter
+                          ; (-> this
+                          ;   (assoc :markers lmark-slice)
+                          ;   (assoc :nodes lnode-slice))
+                          ;
+                            ))
+                    (do
+                      (log/info "Parent has availability" marker-candidate)
+                      (-> this
+                        (assoc :markers new-markers)
+                        (assoc :nodes new-nodes )))))
               (do
                 (log/info "A Nice insert to" idx key val)
                 (assoc this :nodes
@@ -148,7 +169,7 @@
 
 (defn split [nodes]
   ; (log/info nodes)
-  (let [b2! (-> (/ branching-factor 2) int)
+  (let [
         part-a (subvec nodes 0 b2!)
         part-b (subvec nodes b2!)]
     (mapv (fn[x] (->Node true [] x))
@@ -165,7 +186,15 @@
     [start-marker part-a part-b]))
 
 (defn kickoff []
-(def r2 (->Node true [] (mapv (fn [[x y]] (->Data (str x) y)) (charset 65 69))))
-(def r2 (.insert r2 "EEEE" 0x4 nil)))
+(def r2 (->Node true [] (mapv (fn [[x y]] (->Data x y)) (seq (zipmap (range 0 50 10)(range 1 50 10))))))
+
+(def r2 (.insert r2 50 0x4 nil))
+(def r2 (.insert r2 60 0x4 nil))
+(def r2 (.insert r2 70 0x4 nil))
+; (def r2 (.insert r2 80 0x4 nil))
+; (def r2 (.insert r2 90 0x4 nil))
+; (def r2 (.insert r2 31 0x4 nil))
+; (def r2 (.insert r2 32 0x4 nil))
 ; (def r2 (.insert r2 "CCCDABAB" 0x5 nil))
 ; (def r2 (.insert r2 "CDEABABAB" 0x44 nil))
+)
