@@ -13,13 +13,14 @@
   (near-overflow? [_])
   (insert [_ key val parent])
   (has-key-places [_])
+  (split [_ d parent])
   )
 
 (defprotocol IDataNode
   (first-key [_]))
 (def branching-factor 4)
 (def b2! (-> (/ branching-factor 2) int))
-
+(def history (atom []))
 (def gt? (comp pos? compare))
 
 (def lt? (comp neg? compare))
@@ -30,7 +31,7 @@
 (declare find-marker-loc)
 (declare conquer)
 (declare validate-marker)
-
+(declare insert-to-subnode)
 (def debug-list (atom []))
 
 (defn prepare-nodes
@@ -78,6 +79,17 @@
   (has-key-places [this]
     (< (count markers) (dec branching-factor)))
 
+  (split [this new-data-node parent]
+    (let [[marker-candidate part-a part-b] (conquer nodes new-data-node)]
+      (validate-marker marker-candidate this parent)
+      (log/info "Splitting with candidate " marker-candidate (.hashCode this))
+
+        (-> this
+          (assoc :markers (conj (or markers []) marker-candidate))
+          (assoc :nodes [part-a part-b])
+          (assoc :data? false)
+          ))
+    )
   (insert [this key val parent]
     (log/infof "Inserting|%s->%s" key val)
     (let [new-data-node (->Data key val)]
@@ -98,43 +110,26 @@
                     (assoc nodes idx new-node))
                   (catch Throwable t
                     (do (reset! debug-list [this parent new-node]))
-                    (log/error t)))
+                    (log/error t))
+                    )
                     ))
-              (if (and node (near-overflow? node))
-                (let [[marker-candidate part-a part-b] (conquer (:nodes node) new-data-node)
-                      [left right] (slice (vec nodes) idx)
-                      right (rest right)
-                      _ (validate-marker marker-candidate this parent)
-                      new-markers (vec (apply sorted-set (conj (:markers this) marker-candidate)))
-                      new-nodes (vec (concat left [part-a part-b] right ))]
-                    ;; the next step is to check if the
-                    ;; internode has maxout the available slots
-                    ;;
-                    (if (> (count new-markers) (dec branching-factor))
-                      (let [[lmark-slice rmark-slice] (slice new-markers  b2!)
-                            root-marker (first rmark-slice)
-                            _ (validate-marker root-marker this parent)
-                            position (find-insert-pos (prepare-nodes new-nodes) root-marker)
-                            [subleft subright] (slice new-nodes position)]
-                        (log/infof "Divide MARKERS!! %s vs %s " lmark-slice rmark-slice)
-                        ;; before create the new sub nodes, we have to check
-                        ;; if we can populate one of the marks to the up.
-                        (when (and parent (data-node? parent))
-                          (log/infof "Parent MARKERS!! %s - %s -> %s" (:markers parent) new-markers [lmark-slice rmark-slice])
-                        )
-                        (let [left-inter (->Node false lmark-slice subleft)
-                              right-inter (->Node false (rest rmark-slice) subright)
-                              root-inter (->Node false [root-marker] [left-inter right-inter])]
-                        root-inter))
-                      (do
-                        (log/info "Parent has availability" marker-candidate)
-                        (-> this
-                          (assoc :markers new-markers)
-                          (assoc :nodes new-nodes )))))
-              (do
-                (log/info "A Nice insert to" idx key val)
-                (assoc this :nodes
-                  (assoc nodes idx (.insert node  key val this))))))))
+
+              (let [[node' {:keys [markers! nodes!] :as this-node'}]
+                    (insert-to-subnode node idx this parent new-data-node key val)]
+                (log/info "Inserted subnode")
+                (let [this' (if-not (nil? node')
+                              (assoc this :nodes
+                                (assoc nodes idx node'))
+                              this)]
+
+                  (if-not (nil? this-node')
+                    (do
+                      (log/info "Updated node")
+                      (-> this'
+                          (assoc :markers markers!)
+                          (assoc :nodes nodes!)))
+                     this'
+                  ))))))
 
         (if-not (overflow? this)
           (let [position (find-insert-pos nodes key)
@@ -144,15 +139,65 @@
                 (log/info "slice and dice" position)
             (assoc this :nodes (vec (concat left [new-data-node] right  ))))
 
-          (let [[marker-candidate part-a part-b] (conquer nodes new-data-node)]
-            (validate-marker marker-candidate this parent)
-            (log/info "Splitting with candidate " marker-candidate (.hashCode this))
+          (.split this new-data-node parent)
+                )))))
 
-              (-> this
-                (assoc :markers (conj (or markers []) marker-candidate))
-                (assoc :nodes [part-a part-b])
-                (assoc :data? false)
-                )))))))
+(defn insert-to-subnode [node idx this parent new-data-node key val]
+  (log/infof "INSERT SUBNODE #%d" idx )
+  (if (and node (overflow? node))
+    (let [[marker-candidate part-a part-b] (conquer (:nodes node) new-data-node)
+          [left right] (slice (vec (:nodes this)) idx)
+          right (rest right)
+          _ (validate-marker marker-candidate this parent)
+          new-markers (vec (apply sorted-set (conj (:markers this) marker-candidate)))
+          new-nodes (vec (concat left [part-a part-b] right ))]
+        ;; the next step is to check if the
+        ;; internode has maxout the available slots
+        ;;
+        (if (> (count new-markers) (dec branching-factor))
+          (do
+            ;; at this stage, both the subnode is overflow with data
+            ;; and also the parent node overflow with data(markers)
+          (log/info "Must split node again")
+          ; [node nil]
+          [nil (.split this new-data-node parent)]
+          )
+          ; (let [[lmark-slice rmark-slice] (slice new-markers  b2!)
+          ;       root-marker (first rmark-slice)
+          ;       _ (validate-marker root-marker this parent)
+          ;       position (find-insert-pos (prepare-nodes new-nodes) root-marker)
+          ;       [subleft subright] (slice new-nodes position)]
+          ;   (log/infof "Divide MARKERS!! %s vs %s " lmark-slice rmark-slice)
+          ;   ;; before create the new sub nodes, we have to check
+          ;   ;; if we can populate one of the marks to the up.
+          ;   (when (and this (not (data-node? this)))
+          ;     (log/infof "Parent MARKERS!! %s - %s -> %s" (:markers parent) new-markers [lmark-slice rmark-slice])
+          ;   )
+          ;   (let [left-inter (->Node false lmark-slice subleft)
+          ;         right-inter (->Node false (rest rmark-slice) subright)
+          ;         root-inter (->Node false [root-marker] [left-inter right-inter])]
+          ;   ; [root-inter nil]
+          ;   ; [nil ]
+          ;   ))
+          (do
+            (log/info "Parent has availability" marker-candidate)
+            [node
+              { :markers! new-markers
+                :nodes! new-nodes}
+
+                  ])
+
+                          ))
+  (do
+    (log/info "A Nice insert to" idx key val)
+     (let [result (.insert node key val this)
+          _ (log/info "Resulted in smth" (count result) (type result))
+            ]
+        (swap! history conj result)
+        (if (vector? result)
+          result
+          [result nil]
+)))))
 
 (defn validate-marker
   [marker this parent]
@@ -191,12 +236,13 @@
           (first position)  )))
 
 (defn slice [nodes loc]
+  (log/info "Slice nodes" loc)
   [ (subvec (vec nodes) 0 loc)
     (subvec (vec nodes) loc)]
   )
 
 (defn split [nodes]
-  ; (log/info nodes)
+  (log/info "Split nodes")
   (let [
         part-a (subvec nodes 0 b2!)
         part-b (subvec nodes b2!)]
@@ -206,6 +252,7 @@
 
 (defn conquer
   [nodes new-data-node]
+  (log/info "Conquer" new-data-node nodes)
   (let [position (find-insert-pos nodes (:key new-data-node))
         [subleft subright] (slice nodes position)
         temp-node (vec (concat subleft [new-data-node] subright))
@@ -221,11 +268,11 @@
  (.insert  60 0x4 nil)
  (.insert  70 0x4 nil)
  (.insert  80 0x4 nil)
- (.insert  90 0x4 nil)
- (.insert  100 0x4 nil)
+
+ ; (.insert  90 0x4 nil)
+ ; (.insert  100 0x4 nil)
 
 ; (def r2 (.insert r2 32 0x4 nil))
 ; (def r2 (.insert r2 "CCCDABAB" 0x5 nil))
 ; (def r2 (.insert r2 "CDEABABAB" 0x44 nil))
 )))
-(def history (atom []))
