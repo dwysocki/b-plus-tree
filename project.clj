@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                   [com.taoensso/timbre "4.7.3"]
                  [gloss "0.2.6"]]
+    :ultra {:stacktraces false}
    :profiles {:uberjar {:aot :all}
 
            :dev { :source-paths ["dev"]
