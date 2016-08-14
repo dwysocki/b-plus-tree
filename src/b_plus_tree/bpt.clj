@@ -157,16 +157,13 @@
           (do
             ;; at this stage, both the subnode is overflow with data
             ;; and also the parent node overflow with data(markers)
-          (log/info "Must split node again")
-          ; [node nil]
-          (slice-up new-markers new-nodes this parent)
-          )
+            (log/info "Must split node again")
+            (slice-up new-markers new-nodes this parent))
 
           (do
             (log/info "Parent has availability" marker-candidate)
             (swap! history conj { :markers new-markers
-              :nodes new-nodes}
-)
+              :nodes new-nodes})
             [nil
               { :markers new-markers
                 :nodes new-nodes}
@@ -177,8 +174,7 @@
   (do
     (log/info "A Nice insert to" idx key val)
      (let [result (.insert node key val this)
-          _ (log/info "Resulted in smth" (count result) (type result))
-            ]
+          _ (log/info "Resulted in smth" (count result) (type result))]
         (swap! history conj result)
         (if (vector? result)
           result
@@ -246,15 +242,12 @@
     ;; before create the new sub nodes, we have to check
     ;; if we can populate one of the marks to the up.
     (when (and this (not (data-node? this)))
-      (log/infof "Parent MARKERS!! %s - %s -> %s" (:markers parent) new-markers [lmark-slice rmark-slice])
-    )
-    (log/info "Next stage, creating sub-structure")
+      (log/infof "Parent MARKERS!! %s - %s -> %s" (:markers parent) new-markers [lmark-slice rmark-slice]))
+
+
     (let [left-inter (->Node false lmark-slice subleft)
-          _ (log/info "Left OK, creating sub-structure")
           right-inter (->Node false (rest rmark-slice) subright)
-          _ (log/info "Right OK, creating sub-structure")
-          root-inter (->Node false [root-marker] [left-inter right-inter])
-          _ (log/info "Main OK, creating sub-structure")]
+          root-inter (->Node false [root-marker] [left-inter right-inter])]
     ; [root-inter nil]
     [nil root-inter]
     ))
@@ -268,6 +261,37 @@
         [part-a part-b] (split temp-node)
         start-marker (first-key part-b )]
     [start-marker part-a part-b]))
+
+(defn node-iter
+  [root writer]
+  (loop [i 0
+         nodes [root]]
+     (when-not (empty? nodes)
+       (let [subnode-writer
+               (fn [p]
+                 (when (contains? p :data?)
+                  (.append writer (format "\"%s\" [label = \"%s\"];\n" (.hashCode p) (clojure.string/join "-"
+                    (if (empty? (:markers p))
+                      [(.hashCode p)]
+                      (:markers p))) )))
+                   (mapv (fn [n]
+                     (.append writer (format "\"%s\"->\"%s\"; \n" (.hashCode p) (if (contains? n :data?)
+                                                                                  (.hashCode n)
+                                                                                  (:key n))))
+                     n)
+                     (:nodes p)))]
+
+            (recur (inc i)
+                    (mapcat subnode-writer nodes))
+         ))))
+
+(defn snap [tree f]
+  (let [dot (StringBuilder. "digraph rendering { ")]
+    (node-iter tree dot)
+    (.append dot "}")
+    (spit f dot)
+  ))
+
 
 (defn kickoff []
 (def r2 (->Node true [] (mapv (fn [[x y]] (->Data x y))
