@@ -1,8 +1,11 @@
 (ns b-plus-tree.core
   "Primary functions for interacting with the B+ Tree."
   (:require [clojure.set :as set]
-            [b-plus-tree io nodes seq util]
-            [b-plus-tree.util :refer [dbg verbose]]))
+            [b-plus-tree seq util]
+            [b-plus-tree.seq :refer [pop-stack]]
+            [b-plus-tree.nodes :as bnodes]
+            [b-plus-tree.io :as bio]
+            [b-plus-tree.util :refer [dbg verbose min-string in?]]))
 
 (declare print-leaf-keys)
 
@@ -34,7 +37,7 @@
        [nil cache]
        (if-let [node (cache ptr)]
          [node cache]
-         (let [node (b-plus-tree.io/read-node ptr raf)]
+         (let [node (bio/read-node ptr raf)]
            [node (cache-node node raf cache)])))))
 
 (defn- refresh-node
@@ -64,7 +67,7 @@
   "Finds the record in leaf's children which goes to key, or nil if not found."
   ([key leaf raf
     & {:keys [cache]
-       :or {cache {}}}] {:pre [leaf (b-plus-tree.nodes/leaf? leaf)]}
+       :or {cache {}}}] {:pre [leaf (bnodes/leaf? leaf)]}
        (let [found
              (->> leaf
                   :key-ptrs
@@ -84,17 +87,17 @@
     & {:keys [cache]
        :or {cache {}}}]
      (cond
-      (b-plus-tree.nodes/leaf? node)
-      (if (b-plus-tree.util/in? types :record)
+      (bnodes/leaf? node)
+      (if (in? types :record)
         (find-record key node raf
                      :cache cache)
         [nil cache])
-      
+
       (= :record (:type node)) [nil cache]
-      
+
       :default
       (if-let [[nxt cache] (next-node key node raf :cache cache)]
-        (if (b-plus-tree.util/in? types (:type nxt))
+        (if (in? types (:type nxt))
           [nxt cache]
           (recur key types nxt raf
                  {:cache cache}))))))
@@ -102,27 +105,23 @@
 (defn- find-type-stack
   "Returns the next node of the given type while searching the tree for key.
   Builds a stack of visited nodes during the process."
-  ([key types node stack raf
-    & {:keys [cache]
-       :or {cache {}}}]
-     (let [stack (conj stack node)]
-       (cond
-        (b-plus-tree.nodes/leaf? node)
-        (if (b-plus-tree.util/in? types :record)
-          (let [[data cache]
-                (find-record key node raf
-                             :cache cache)]
-            [data stack cache])
-          [nil stack cache])
+  [key types node stack raf & {:keys [cache] :or {cache {}}}]
+   (let [stack (conj stack node)]
+     (cond
+      (bnodes/leaf? node)
+      (if (in? types :record)
+        (let [[data cache] (find-record key node raf :cache cache)]
+          [data stack cache])
+        [nil stack cache])
 
-        (= :record (:type node)) [nil stack cache]
+      (= :record (:type node)) [nil stack cache]
 
-        :default
-        (if-let [[nxt cache] (next-node key node raf :cache cache)]
-          (if (b-plus-tree.util/in? types (:type nxt))
-            [nxt stack cache]
-            (recur key types nxt stack raf
-                   {:cache cache})))))))
+      :default
+      (if-let [[nxt cache] (next-node key node raf :cache cache)]
+        (if (in? types (:type nxt))
+          [nxt stack cache]
+          (recur key types nxt stack raf
+                 {:cache cache}))))))
 
 (defn find-val
   "Returns the value associated with key by traversing the entire tree, or
@@ -165,7 +164,7 @@
                                                          key-ptrs),
            [left-offset right-offset free]
            (b-plus-tree.seq/n-range free 3 page-size),
-           
+
            left-node {:type :leaf
                       :key-ptrs left
                       :prev -1
@@ -201,9 +200,9 @@
        :or {cache {}}}]
      (let [[left-kps [mid-k mid-p] right-kps]
            (b-plus-tree.seq/split-center key-ptrs),
-           
+
            [left right] (map (partial into (sorted-map)) [left-kps right-kps]),
-           
+
            [left-offset right-offset free]
            (b-plus-tree.seq/n-range free 3 page-size),
 
@@ -348,10 +347,10 @@
                        :cache cache)]
        (if (seq stack)
          ; push up key to parent
-         (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
+         (let [[stack parent] (pop-stack stack)
                parent         (insert-parent key ptr parent)
                cache          (cache-node parent raf cache)]
-           (if (b-plus-tree.nodes/overfull? parent order)
+           (if (bnodes/overfull? parent order)
              ; parent is full, split parent
              (recur parent stack raf header {:cache cache})
              ; finished splitting
@@ -371,11 +370,11 @@
      :as header}
     & {:keys [cache]
        :or {cache {}}}]
-     {:pre [(>= key-size (count key))
-            (>= val-size (count val))]}
+    ;  {:pre [(>= key-size (count key))
+    ;         (>= val-size (count val))]}
      (if (zero? size)
        ; empty B+ Tree
-       (let [[root record] (b-plus-tree.nodes/new-root key val free page-size)]
+       (let [[root record] (bnodes/new-root key val free page-size)]
          [(assoc header
             :count 1
             :root  (:offset root)
@@ -386,7 +385,7 @@
        (let [[root cache] (get-node root-ptr raf cache)
              [record stack cache] (find-stack key raf header
                                               :cache cache)
-             [stack leaf] (b-plus-tree.seq/pop-stack stack)]
+             [stack leaf] (pop-stack stack)]
          (if record
            ; record already exists, overwrite
            [header, (cache-node (assoc record
@@ -395,7 +394,7 @@
                                 raf
                                 cache)]
            ; record does not exist, insert at leaf
-           (let [leaf (b-plus-tree.nodes/node-assoc leaf key free)
+           (let [leaf (bnodes/node-assoc leaf key free)
                  record {:type :record
                          :data val
                          :offset free
@@ -403,7 +402,7 @@
                  header (assoc header
                           :free (+ free page-size)
                           :count (inc size))]
-             (if (b-plus-tree.nodes/overfull? leaf order)
+             (if (bnodes/overfull? leaf order)
                ; leaf is full, begin splitting
                (insert-split leaf stack raf header
                              :cache (cache-node record raf cache))
@@ -419,8 +418,7 @@
        :or {cache {}}}]
      (if-let [entry (first keyvals)]
        (let [[key val] entry
-             [header cache] (b-plus-tree.core/insert key val raf
-                                                     header
+             [header cache] (insert key val raf header
                                                      :cache cache)]
          (recur (next keyvals) raf header {:cache cache}))
        [header cache])))
@@ -432,13 +430,13 @@
   Throws an exception if a key is not found in the stack."
   ([key-replacements stack raf cache]
      (let [[stack node]
-           (b-plus-tree.seq/pop-stack stack)
+           (pop-stack stack)
 
            ; re-read node from cache/disc in case it's changed
            [{:keys [key-ptrs] :as node} cache]
            (refresh-node node raf cache)
 ;           (get-node (:offset node) raf cache)
-           
+
            ; set of all keys which will be replaced
            replaced-keys (apply clojure.set/intersection
                                 (map (comp set keys)
@@ -523,13 +521,13 @@
            ; either the deleted key, or the first key has a copy in
            ; the internal nodes, and it's whichever comes
            ; lexicographically first
-           internal-key (b-plus-tree.util/min-string deleted-key first-key)
+           internal-key (min-string deleted-key first-key)
            ; get the last key from the previous leaf
            [stolen-key stolen-ptr] (-> prev-leaf :key-ptrs last)
            ; delete the last key from the previous leaf
-           prev-leaf (b-plus-tree.nodes/node-dissoc prev-leaf stolen-key)
+           prev-leaf (bnodes/node-dissoc prev-leaf stolen-key)
            ; add the stolen key to the leaf
-           leaf (b-plus-tree.nodes/node-assoc leaf stolen-key stolen-ptr)]
+           leaf (bnodes/node-assoc leaf stolen-key stolen-ptr)]
        ; replace the key in the internal nodes with the stolen key
        (replace-keys {internal-key stolen-key} stack raf
                      (cache-nodes [leaf prev-leaf] raf cache)))))
@@ -546,9 +544,9 @@
            [[stolen-key stolen-ptr] [second-key _]]
            (->> next-leaf :key-ptrs (take 2))
            ; remove the stolen key/ptr from next-leaf
-           next-leaf (b-plus-tree.nodes/node-dissoc next-leaf stolen-key)
+           next-leaf (bnodes/node-dissoc next-leaf stolen-key)
            ; add the stolen key/ptr to leaf
-           leaf (b-plus-tree.nodes/node-assoc leaf stolen-key stolen-ptr)
+           leaf (bnodes/node-assoc leaf stolen-key stolen-ptr)
            ; push the key which succeeds stolen-key up into the
            ; internal nodes
            first-key (-> leaf :key-ptrs first first)
@@ -583,16 +581,16 @@
            pulled-key (ptr->key (:key-ptrs parent) (:offset prev-node))
            ; replace key in parent which points to node with the key
            ; being pulled from prev-node
-           parent (b-plus-tree.nodes/node-rename-keys parent {pulled-key
+           parent (bnodes/node-rename-keys parent {pulled-key
                                                               pushed-key})
            ; remove the pushed key from prev-node, and set the :last
            ; ptr to the ptr that was associated with that key
            prev-node (-> prev-node
-                         (b-plus-tree.nodes/node-dissoc pushed-key)
+                         (bnodes/node-dissoc pushed-key)
                          (assoc :last new-last))
            ; add the key pulled from parent to the front of node,
            ; having it point to what prev-node's :last ptr pointed to
-           node (b-plus-tree.nodes/node-assoc node pulled-key new-first)
+           node (bnodes/node-assoc node pulled-key new-first)
            ; write altered nodes to cache
            cache (cache-nodes [node prev-node parent] raf cache)]
        [parent, cache])))
@@ -603,11 +601,11 @@
      (let [[pushed-key new-last] (-> next-node :key-ptrs first)
            old-last (:last node)
            pulled-key (ptr->key (:key-ptrs parent) (:offset node))
-           parent (b-plus-tree.nodes/node-rename-keys parent {pulled-key
+           parent (bnodes/node-rename-keys parent {pulled-key
                                                               pushed-key})
-           next-node (b-plus-tree.nodes/node-dissoc next-node pushed-key)
+           next-node (bnodes/node-dissoc next-node pushed-key)
            node (-> node
-                    (b-plus-tree.nodes/node-assoc pulled-key old-last)
+                    (bnodes/node-assoc pulled-key old-last)
                     (assoc :last new-last))
            cache (cache-nodes [node next-node parent] raf cache)]
        [parent, cache])))
@@ -615,15 +613,15 @@
 (defn- merge-prev-leaf
   "Merge leaf with the previous leaf. Returns cache"
   ([leaf prev-leaf deleted-key stack raf cache]
-     (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
+     (let [[stack parent] (pop-stack stack)
            first-key (-> leaf :key-ptrs first first)
            ; the key to remove from the parent, which is either the
            ; current first key, or the deleted key, if it used to be first
-           parent-key (b-plus-tree.util/min-string deleted-key first-key)
+           parent-key (min-string deleted-key first-key)
            ; add the key-ptrs from prev-leaf to leaf
-           leaf (b-plus-tree.nodes/leaf-merge leaf prev-leaf :prev)
+           leaf (bnodes/leaf-merge leaf prev-leaf :prev)
            ; remove parent-key from parent's key-ptrs
-           parent (b-plus-tree.nodes/node-dissoc parent parent-key)
+           parent (bnodes/node-dissoc parent parent-key)
            cache (cache-nodes [parent leaf] raf cache)
            ; remove prev-leaf from the cache
            cache (dissoc cache (:offset prev-leaf))
@@ -643,13 +641,13 @@
 (defn- merge-next-leaf
   "Merge leaf with the next leaf. Returns [parent cache]"
   ([leaf next-leaf deleted-key stack raf cache]
-     (let [[stack parent] (b-plus-tree.seq/pop-stack stack)
+     (let [[stack parent] (pop-stack stack)
            ; must delete the first key from next-leaf from the parent
            parent-key (-> next-leaf :key-ptrs first first)
            ; add the key-ptrs from leaf to next-leaf
-           next-leaf (b-plus-tree.nodes/leaf-merge next-leaf leaf :prev)
+           next-leaf (bnodes/leaf-merge next-leaf leaf :prev)
            ; remove parent-key from parent's key-ptrs
-           parent (b-plus-tree.nodes/node-dissoc parent parent-key)
+           parent (bnodes/node-dissoc parent parent-key)
            cache (cache-nodes [parent next-leaf] raf cache)
            ; remove leaf from cache
            cache (dissoc cache (:offset leaf))
@@ -665,7 +663,7 @@
                    (cache-node prev-leaf raf cache)
                    ; no such node exists, leave cache unchanged
                    cache)
-           
+
            ; if leaf is not the leftmost leaf, and its leftmost key
            ; was deleted, then we will need to replace the deleted key
            ; in the internal nodes with the new leftmost key
@@ -695,7 +693,7 @@
                         :last (:last high-node)
                         :offset (:offset high-node)
                         :altered? true}
-           parent (b-plus-tree.nodes/node-dissoc parent stolen-key)
+           parent (bnodes/node-dissoc parent stolen-key)
            ; cache altered nodes
            cache (cache-nodes [merged-node, parent] raf cache)
            ; remove low-node from cache
@@ -744,7 +742,7 @@
        (cond
         ; merge with root
         (and (= (:type parent) :root-nonleaf)
-             (not (b-plus-tree.nodes/shrinkable? parent order)))
+             (not (bnodes/shrinkable? parent order)))
         (merge-root-internal low-node high-node parent raf cache)
         ; merge with previous node
         prev-node
@@ -774,7 +772,7 @@
        (cond
         ; merging with root
         (and (= (:type parent) :root-nonleaf)
-             (not (b-plus-tree.nodes/shrinkable? parent order)))
+             (not (bnodes/shrinkable? parent order)))
         (merge-root-leaf low-leaf high-leaf parent raf cache)
         ; merge with previous leaf
         prev-leaf
@@ -796,10 +794,10 @@
      (let [[prev-node next-node] (siblings node parent raf cache)]
        (cond
         ; prev-node exists and can be stolen from
-        (and prev-node (b-plus-tree.nodes/shrinkable? prev-node order))
+        (and prev-node (bnodes/shrinkable? prev-node order))
         (steal-prev-internal node prev-node parent raf cache)
         ; next-node exists and can be stolen from
-        (and next-node (b-plus-tree.nodes/shrinkable? next-node order))
+        (and next-node (bnodes/shrinkable? next-node order))
         (steal-next-internal node next-node parent raf cache)
         :default ; previous and next nodes cannot be stolen from, merge
         (merge-internals node prev-node next-node parent raf header cache)))))
@@ -816,10 +814,10 @@
            [prev-leaf next-leaf] (siblings leaf parent raf cache)]
        (cond
         ; prev-leaf exists and can be stolen from
-        (and prev-leaf (b-plus-tree.nodes/shrinkable? prev-leaf order))
+        (and prev-leaf (bnodes/shrinkable? prev-leaf order))
         (steal-prev-leaf leaf deleted-key prev-leaf stack raf cache)
         ; next-leaf exists and can be stolen from
-        (and next-leaf (b-plus-tree.nodes/shrinkable? next-leaf order))
+        (and next-leaf (bnodes/shrinkable? next-leaf order))
         (steal-next-leaf leaf deleted-key next-leaf stack raf cache)
         :default ; prev and next leaves cannot be stolen from, merge
         (merge-leaves leaf prev-leaf next-leaf deleted-key
@@ -833,7 +831,7 @@
      :as header}
     cache]
      (let [cache (steal-merge-leaves leaf deleted-key stack raf header cache)
-           [stack parent] (b-plus-tree.seq/pop-stack stack)
+           [stack parent] (pop-stack stack)
            [parent cache] (refresh-node parent raf cache)]
        (loop [node   parent
               stack  stack
@@ -841,9 +839,9 @@
          ; steal/merge while there are parents, and the current node
          ; is underfull
          (if (and (seq stack)
-                  (b-plus-tree.nodes/underfull? node order))
+                  (bnodes/underfull? node order))
            (let [; get parent from stack
-                 [stack parent] (b-plus-tree.seq/pop-stack stack)
+                 [stack parent] (pop-stack stack)
                  ; refresh parent in case it's been altered
                  [parent cache] (refresh-node parent raf cache)
                  ; steal/merge
@@ -854,6 +852,7 @@
            ; finished merging and stealing, return the cache
            cache)))))
 
+(def ^:static left-most 1)
 
 (defn delete
   "Deletes key from the B+ Tree. Returns [header cache].
@@ -878,7 +877,7 @@
        (let [[root cache] (get-node root-ptr raf cache)
              [record stack cache] (find-stack key raf header
                                               :cache cache)
-             [stack leaf] (b-plus-tree.seq/pop-stack stack)
+             [stack leaf] (pop-stack stack)
              ; unpack leaf
              {:keys [type key-ptrs]} leaf]
          (if (key-ptrs key)
@@ -887,25 +886,23 @@
                           :count (dec size))
                  cache
                  (if (or
-                      ; leaf is the root
                       (= type :root-leaf)
-                      ; leaf is the left-most leaf
-                      (= (:prev leaf) -1)
+                      (= (:prev leaf) left-most)
                       ; key is not the left-most key in the leaf
                       (not= key (-> key-ptrs first first)))
                    ; key is not repeated in internal nodes
-                   (let [leaf (b-plus-tree.nodes/node-dissoc leaf key)]
-                     (if (b-plus-tree.nodes/underfull? leaf order)
+                   (let [leaf (bnodes/node-dissoc leaf key)]
+                     (if (bnodes/underfull? leaf order)
                        ; leaf is underfull, steal or merge
                        (steal-merge leaf key stack raf header cache)
                        ; leaf contains enough elements, delete is finished
                        (cache-node leaf raf cache)))
                    ; key is repeated in internal nodes
-                   (let [leaf (b-plus-tree.nodes/node-dissoc leaf key)
+                   (let [leaf (bnodes/node-dissoc leaf key)
                          ; key which needs to replace the deleted key
                          ; in internal nodes
                          replacement-key (-> leaf :key-ptrs first first)]
-                     (if (b-plus-tree.nodes/underfull? leaf order)
+                     (if (bnodes/underfull? leaf order)
                        ; leaf is underfull, begin steal or merge
                        (steal-merge leaf key stack raf header cache)
                        ; leaf contains enough elements, simply replace key
@@ -923,13 +920,10 @@
   ([ks raf header
     & {:keys [cache]
        :or {cache {}}}]
-     
-     
      (if-let [k (first ks)]
-       (let [[header cache] (b-plus-tree.core/delete k raf
-                                                     header
+       (let [[header cache] (b-plus-tree.core/delete k raf header
                                                      :cache cache)]
-         (b-plus-tree.io/write-cache cache raf)
+         (bio/write-cache cache raf)
          (recur (next ks) raf header {}))
        [header cache])))
 
@@ -966,7 +960,7 @@
          (loop [n    0
                 node root
                 cache cache]
-           (if (b-plus-tree.nodes/leaf? node)
+           (if (bnodes/leaf? node)
              n
              (let [[node cache] (get-node (:last node) raf cache)]
                (recur (inc n) node cache)))))
@@ -975,7 +969,7 @@
 (defn- lowest-leaf
   "Returns the lowest leaf in sorted order starting at node."
   ([node raf header cache]
-     (if (b-plus-tree.nodes/leaf? node)
+     (if (bnodes/leaf? node)
        node
        (let [next-ptr (-> node :key-ptrs first second)
              [next-node cache] (get-node next-ptr raf cache)]
@@ -984,7 +978,7 @@
 (defn- highest-leaf
   "Returns the highest leaf in sorted order starting at node."
   ([node raf header cache]
-     (if (b-plus-tree.nodes/leaf? node)
+     (if (bnodes/leaf? node)
        node
        (let [next-ptr (:last node)
              [next-node cache] (get-node next-ptr raf cache)]
@@ -1124,31 +1118,28 @@
          (println "String not found.")
          [header cache]))))
 
-(comment
-  (defn key-subset
-    "Returns a seq of all the keys in the B+ Tree between start (inclusive)
-  and end (exclusive)."
-    ([start end raf header
-      & {:keys [cache]
-         :or {cache {}}}]
-       (when (pos? (:count header))
-         (if (= start end)
-           (when (first (find-val start raf header :cache cache))
-             start)
-           (let [[root cache] (get-node (:root header) raf cache)
-                 [_ stack cache] (find-stack start raf header cache)
-                 [_ leaf] (b-plus-tree.seq/pop-stack stack)
-                 ks  (->> leaf :key-ptrs keys
-                          (drop-while #(neg? (compare % start))))
-                 nxt (:next leaf)
-                 step (fn step [ks nxt]
-                        (when-let [k (first ks)]
-                          (when (neg? (compare k end))
-                            (if-let [ks (next keys)]
-                              (cons k )))))]
-             )))
-       
-       )))
+; (comment
+;   (defn key-subset
+;     "Returns a seq of all the keys in the B+ Tree between start (inclusive)
+;   and end (exclusive)."
+;     ([start end raf header
+;       & {:keys [cache]
+;          :or {cache {}}}]
+;        (when (pos? (:count header))
+;          (if (= start end)
+;            (when (first (find-val start raf header :cache cache))
+;              start)
+;            (let [[root cache] (get-node (:root header) raf cache)
+;                  [_ stack cache] (find-stack start raf header cache)
+;                  [_ leaf] (pop-stack stack)
+;                  ks  (->> leaf :key-ptrs keys
+;                           (drop-while #(neg? (compare % start))))
+;                  nxt (:next leaf)
+;                  step (fn step [ks nxt]
+;                         (when-let [k (first ks)]
+;                           (when (neg? (compare k end))
+;                             (if-let [ks (next keys)]
+;                               (cons k )))))]))))))
 
 
 
@@ -1187,6 +1178,5 @@
      (let [leaf-seq (leaf-seq raf header
                               :cache cache)]
        (when (seq leaf-seq)
-         (doall (map (comp println keys :key-ptrs) leaf-seq))))))
-
-
+         (doall
+           (map (comp println keys :key-ptrs) leaf-seq))))))

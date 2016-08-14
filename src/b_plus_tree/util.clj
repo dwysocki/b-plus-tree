@@ -92,3 +92,5 @@
 (defn max-string
   "Returns the string which is lexicographically greatest."
   ([& strings] (-> strings sort last)))
+
+(defn charset [start end] (map (fn[x] [(apply str (repeat 4 (char x))) x] ) (range start end)))

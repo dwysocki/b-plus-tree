@@ -1,26 +1,28 @@
 (ns b-plus-tree.io
   "Operations for B+ Tree I/O."
-  (:require [gloss core io]
+  (:require [gloss.core :as gloss]
+            [gloss.io :as gio]
             [b-plus-tree.nodes :as nodes]
             [b-plus-tree.util :as util]
-            [b-plus-tree.util :refer [dbg verbose]]))
+            [taoensso.timbre :as log]
+            ))
 
 (defn header-size
-  ([]
-     (gloss.core/byte-count
-      (gloss.io/encode nodes/header-node
+  []
+     (gloss/byte-count
+      (gio/encode nodes/header-node
                        {:count 0
                         :free 0
                         :order 0
                         :key-size 0
                         :val-size 0
                         :page-size 0
-                        :root 0}))))
+                        :root 0})))
 
 (defn max-node-size
   ([order key-size]
-     (gloss.core/byte-count
-      (gloss.io/encode nodes/node
+     (gloss/byte-count
+      (gio/encode nodes/node
                        {:type :internal
                         :key-ptrs (apply sorted-map
                                          (interleave
@@ -31,8 +33,8 @@
 
 (defn max-record-size
   ([val-size]
-     (gloss.core/byte-count
-      (gloss.io/encode nodes/node
+     (gloss/byte-count
+      (gio/encode nodes/node
                        {:type :record
                         :data  (apply str
                                       (repeat val-size \a))}))))
@@ -56,7 +58,7 @@
   ([filename order key-size val-size page-size]
      (when-not (check-parameters order key-size val-size page-size)
        (throw (ex-info "Insufficient page size.")))
-     (let [header (gloss.io/encode nodes/header-node
+     (let [header (gio/encode nodes/header-node
                                    {:count     0,
                                     :free      page-size,
                                     :order     order,
@@ -68,33 +70,35 @@
          (if (pos? (.length raf))
            (throw (ex-info "File already exists."))
            (.write raf
-                   (.array (gloss.io/contiguous header))))))))
+                   (.array (gio/contiguous header))))))))
 
 (defn read-header
   "Reads the header from the RandomAccessFile."
-  ([raf]
+  [^java.io.RandomAccessFile raf]
      (.seek raf 0) ; go to head of file
      (let [header-bytes (byte-array (header-size))]
        (.readFully raf header-bytes)
-       (gloss.io/decode nodes/header-node header-bytes))))
+       (gio/decode nodes/header-node header-bytes)))
 
 (defn write-header
   "Writes the header to the RandomAccessFile."
-  ([header raf]
-     (.seek raf 0)
-     (.write raf
-             (.array (gloss.io/contiguous (gloss.io/encode nodes/header-node
-                                                           header))))))
+  [header ^java.io.RandomAccessFile raf]
+  (log/info "Seeking to header")
+   (.seek raf 0)
+   (log/info "Writing header...")
+   (.write raf
+           (.array (gio/contiguous (gio/encode nodes/header-node
+                                                         header)))))
 
 (defn read-node
   "Reads the node stored in the RandomAccessFile at the given offset."
-  ([offset raf]
-     (.seek raf offset)
-     (let [size (.readShort raf)
-           node-bytes (byte-array size)]
-       (.readFully raf node-bytes)
-       (assoc (gloss.io/decode nodes/node (gloss.io/to-byte-buffer node-bytes))
-         :offset offset))))
+  [offset ^java.io.RandomAccessFile raf]
+   (.seek raf offset)
+   (let [size (.readShort raf)
+         node-bytes (byte-array size)]
+     (.readFully raf node-bytes)
+     (assoc (gio/decode nodes/node (gio/to-byte-buffer node-bytes))
+       :offset offset)))
 
 (comment
   (defn read-root
@@ -107,24 +111,26 @@
 (defn write-node
   "Writes the node to the RandomAccessFile at the given offset. Returns the
   offset of the file after writing."
-  ([{:keys [offset] :as node} raf]
-     (let [encoded-node (gloss.io/encode nodes/node node)
-           size (gloss.core/byte-count encoded-node)]
+  [{:keys [offset] :as node} ^java.io.RandomAccessFile raf]
+     (let [encoded-node (gio/encode nodes/node node)
+           size (gloss/byte-count encoded-node)]
+      (log/infof "writing node %s" offset)
        (doto raf
          (.seek offset)
          (.writeShort size)
-         (.write (.array (gloss.io/contiguous encoded-node))))
-       (.getFilePointer raf))))
+         (.write (.array (gio/contiguous encoded-node))))
+      (log/infof "done writing node %s" offset)
+       (.getFilePointer raf)))
 
 (defn write-cache
   "Writes all nodes in the cache map which have been altered"
-  ([cache raf]
+  [cache raf]
      (and (seq cache)
           (->> cache
                vals
                (filter :altered?)
                (map #(write-node % raf))
-               doall))))
+               doall)))
 
 (comment
   (defn write-cache
