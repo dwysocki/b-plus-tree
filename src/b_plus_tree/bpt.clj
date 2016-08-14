@@ -32,6 +32,19 @@
 (declare validate-marker)
 
 (def debug-list (atom []))
+
+(defn prepare-nodes
+  [new-nodes]
+  (map
+    (fn[x] (let [els (remove nil?
+                    (mapv :key (:nodes x)))]
+                    (when-not (empty? els)
+                      {:key (apply max els)})
+                    ))
+
+    new-nodes)
+  )
+
 (defrecord Data[key val])
 (defrecord Node [data? markers nodes ]
   clojure.lang.ISeq
@@ -92,7 +105,7 @@
                       [left right] (slice (vec nodes) idx)
                       right (rest right)
                       _ (validate-marker marker-candidate this parent)
-                      new-markers (vec (apply sorted-set (conj markers marker-candidate)))
+                      new-markers (vec (apply sorted-set (conj (:markers this) marker-candidate)))
                       new-nodes (vec (concat left [part-a part-b] right ))]
                     ;; the next step is to check if the
                     ;; internode has maxout the available slots
@@ -101,22 +114,18 @@
                       (let [[lmark-slice rmark-slice] (slice new-markers  b2!)
                             root-marker (first rmark-slice)
                             _ (validate-marker root-marker this parent)
-                            position (find-insert-pos (map
-                              (fn[x] (let [els (remove nil?
-                                              (mapv :key (:nodes x)))]
-                                              (when-not (empty? els)
-                                                {:key (apply max els)})
-                                              ))
-
-                              new-nodes) root-marker)
-                            [subleft subright] (slice new-nodes position)
-                            ; [lnode-slice rnode-slice] (slice new-nodes b2!)
-                            ]
-                            (log/infof "Divide MARKERS!! %s vs %s " lmark-slice rmark-slice)
-                            (let [left-inter (->Node false lmark-slice subleft)
-                                  right-inter (->Node false (rest rmark-slice) subright)
-                                  root-inter (->Node false [root-marker] [left-inter right-inter])]
-                            root-inter))
+                            position (find-insert-pos (prepare-nodes new-nodes) root-marker)
+                            [subleft subright] (slice new-nodes position)]
+                        (log/infof "Divide MARKERS!! %s vs %s " lmark-slice rmark-slice)
+                        ;; before create the new sub nodes, we have to check
+                        ;; if we can populate one of the marks to the up.
+                        (when (and parent (data-node? parent))
+                          (log/infof "Parent MARKERS!! %s - %s -> %s" (:markers parent) new-markers [lmark-slice rmark-slice])
+                        )
+                        (let [left-inter (->Node false lmark-slice subleft)
+                              right-inter (->Node false (rest rmark-slice) subright)
+                              root-inter (->Node false [root-marker] [left-inter right-inter])]
+                        root-inter))
                       (do
                         (log/info "Parent has availability" marker-candidate)
                         (-> this
@@ -219,3 +228,4 @@
 ; (def r2 (.insert r2 "CCCDABAB" 0x5 nil))
 ; (def r2 (.insert r2 "CDEABABAB" 0x44 nil))
 )))
+(def history (atom []))
